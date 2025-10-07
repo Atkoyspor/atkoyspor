@@ -5862,9 +5862,24 @@ if (student.sport && sportBranches.length > 0) {
         }
     
     try {
+        // iOS Safari detection
+        const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        if (isIOSSafari) {
+            // iOS Safari için alternatif print yöntemi
+            this.printFormIOS(student);
+            return;
+        }
+        
         // Yazdırma penceresi oluştur
-        const printWindow = window.open('', '_blank', 'width=800,height=600');         
-            const printContent = `
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        
+        if (!printWindow) {
+            alert('Popup engelleyici aktif. Lütfen popupları etkinleştirin.');
+            return;
+        }
+        
+        const printContent = `
                 <!DOCTYPE html>
                 <html>
                 <head>
@@ -6010,7 +6025,7 @@ if (student.sport && sportBranches.length > 0) {
                     <!-- Header -->
                     <div class="header">
          <div class="logo">
-    <img src="C:/Users/hasan/CascadeProjects/atkoy-supa/atkoy.jpeg" alt="ATKÖYSPOR KULÜBÜ" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖYSPOR<br>KULÜBÜ<br>LOGOSU';">
+    <img src="atkoy.jpeg" alt="ATKÖYSPOR KULÜBÜ" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖYSPOR<br>KULÜBÜ<br>LOGOSU';">
 </div>
                         <div class="title">
                             ATKÖYSPOR KULÜBÜ<br>
@@ -6136,12 +6151,100 @@ if (student.sport && sportBranches.length > 0) {
             }, 500);
     
         } catch (error) {
-            console.error('Print error:', error);
-            alert('Form yazdırılamadı: ' + this.formatErrorMessage(error));
+            console.error('Error printing form:', error);
+            alert('Form yazdırılırken hata oluştu: ' + error.message);
         }
     }
 
-    
+    // iOS Safari için özel print fonksiyonu
+    printFormIOS(student) {
+        try {
+            // Mevcut sayfada gizli div oluştur
+            const printDiv = document.createElement('div');
+            printDiv.id = 'ios-print-content';
+            printDiv.style.display = 'none';
+            
+            const printContent = `
+                <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; border-bottom: 3px solid #dc2626; padding-bottom: 15px;">
+                        <div style="flex: 1;">
+                            <img src="atkoy.jpeg" alt="Atköy Spor Logo" style="width: 80px; height: 80px; object-fit: contain;" onerror="this.style.display='none'">
+                        </div>
+                        <div style="flex: 2; text-align: center;">
+                            <h1 style="color: #dc2626; margin: 0; font-size: 24px;">ATKÖYSPOR KULÜBÜ</h1>
+                            <h2 style="color: #374151; margin: 10px 0; font-size: 18px;">SPORCU KAYIT FORMU</h2>
+                        </div>
+                        <div style="flex: 1; text-align: right;">
+                            <div style="width: 80px; height: 100px; border: 2px solid #ccc; display: inline-block; position: relative;">
+                                <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #666;">FOTOĞRAF</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <h3 style="background: #dc2626; color: white; padding: 8px; margin: 0; font-size: 16px;">KİŞİSEL BİLGİLER</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold; width: 30%;">Ad Soyad:</td>
+                                <td style="border: 1px solid #ccc; padding: 8px;">${student.full_name || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">TC Kimlik No:</td>
+                                <td style="border: 1px solid #ccc; padding: 8px;">${student.tc_no || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">Doğum Tarihi:</td>
+                                <td style="border: 1px solid #ccc; padding: 8px;">${student.birth_date || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">Telefon:</td>
+                                <td style="border: 1px solid #ccc; padding: 8px;">${student.phone || ''}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div style="margin-top: 40px; text-align: center; font-size: 12px; color: #666;">
+                        Yazdırma Tarihi: ${new Date().toLocaleDateString('tr-TR')}
+                    </div>
+                </div>
+            `;
+            
+            printDiv.innerHTML = printContent;
+            document.body.appendChild(printDiv);
+            
+            // Print CSS ekle
+            const printStyle = document.createElement('style');
+            printStyle.innerHTML = `
+                @media print {
+                    body * { visibility: hidden; }
+                    #ios-print-content, #ios-print-content * { visibility: visible; }
+                    #ios-print-content { 
+                        position: absolute; 
+                        left: 0; 
+                        top: 0; 
+                        width: 100%; 
+                        display: block !important;
+                    }
+                }
+            `;
+            document.head.appendChild(printStyle);
+            
+            // Print dialog aç
+            setTimeout(() => {
+                window.print();
+                
+                // Temizlik
+                setTimeout(() => {
+                    document.body.removeChild(printDiv);
+                    document.head.removeChild(printStyle);
+                }, 1000);
+            }, 100);
+            
+        } catch (error) {
+            console.error('iOS print error:', error);
+            alert('Form yazdırılırken hata oluştu. Lütfen tekrar deneyin.');
+        }
+    }
 
     getSportBranchFee(sportName) {
         if (!this.sportBranches) return null;
