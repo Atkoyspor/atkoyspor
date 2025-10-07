@@ -6159,6 +6159,38 @@ if (student.sport && sportBranches.length > 0) {
     // iOS Safari için özel print fonksiyonu
     printFormIOS(student) {
         try {
+            console.log('iOS Print - Student data:', student);
+            
+            // Eğer student objesi eksikse, mevcut formdaki verileri al
+            if (!student || !student.full_name) {
+                const fullNameField = document.getElementById('fullName');
+                const tcNoField = document.getElementById('tcNo');
+                const phoneField = document.getElementById('phone');
+                const birthDateField = document.getElementById('birthDate');
+                const addressField = document.getElementById('address');
+                
+                student = {
+                    full_name: fullNameField ? fullNameField.value : '',
+                    tc_no: tcNoField ? tcNoField.value : '',
+                    phone: phoneField ? phoneField.value : '',
+                    birth_date: birthDateField ? birthDateField.value : '',
+                    address: addressField ? addressField.value : '',
+                    email: document.getElementById('email') ? document.getElementById('email').value : '',
+                    height: document.getElementById('height') ? document.getElementById('height').value : '',
+                    weight: document.getElementById('weight') ? document.getElementById('weight').value : '',
+                    blood_type: document.getElementById('bloodType') ? document.getElementById('bloodType').value : '',
+                    school: document.getElementById('school') ? document.getElementById('school').value : '',
+                    birth_place: document.getElementById('birthPlace') ? document.getElementById('birthPlace').value : '',
+                    father_name: document.getElementById('fatherName') ? document.getElementById('fatherName').value : '',
+                    mother_name: document.getElementById('motherName') ? document.getElementById('motherName').value : '',
+                    parent_phone: document.getElementById('parentPhone') ? document.getElementById('parentPhone').value : '',
+                    emergency_contact: document.getElementById('emergencyContact') ? document.getElementById('emergencyContact').value : '',
+                    emergency_phone: document.getElementById('emergencyPhone') ? document.getElementById('emergencyPhone').value : ''
+                };
+                
+                console.log('iOS Print - Form data collected:', student);
+            }
+            
             // Mevcut sayfada gizli div oluştur
             const printDiv = document.createElement('div');
             printDiv.id = 'ios-print-content';
@@ -6181,24 +6213,101 @@ if (student.sport && sportBranches.length > 0) {
                         </div>
                     </div>
                     
-                    <div style="margin-bottom: 20px;">
-                        <h3 style="background: #dc2626; color: white; padding: 8px; margin: 0; font-size: 16px;">KİŞİSEL BİLGİLER</h3>
+                    <!-- Öğrenci Bilgileri -->
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="background: #dc2626; color: white; padding: 8px; margin: 0; font-size: 14px; text-align: center;">Öğrenci Bilgileri</h3>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; width: 25%;">TC Kimlik No:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; width: 25%;">${student.tc_no || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; width: 25%;">Boy:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; width: 25%;">${student.height || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Adı Soyadı:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.full_name || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Kilo:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.weight || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Doğum Yeri ve Tarihi:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${(student.birth_place || '') + ' / ' + (student.birth_date || '')}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Kan Grubu:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.blood_type || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Okulu:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.school || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Öğrenci Tel:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.phone || ''}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Öğrenci Veli Bilgileri -->
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="background: #dc2626; color: white; padding: 8px; margin: 0; font-size: 14px; text-align: center;">Öğrenci Veli Bilgileri</h3>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; width: 25%;">Baba Adı:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; width: 25%;">${student.father_name || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; width: 25%;">Telefonu:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; width: 25%;">${student.parent_phone || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Anne Adı:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.mother_name || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Telefonu:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;">${student.parent_phone || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Ev Adresi:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;" colspan="3">${student.address || ''}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Acil Durumlarda Ulaşılacak Kişiler -->
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="background: #dc2626; color: white; padding: 8px; margin: 0; font-size: 14px; text-align: center;">Acil Durumlarda Veli Dışında Ulaşılabilecek Kişiler</h3>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; width: 25%;">Yakınlık Derecesi:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; width: 25%;">${student.emergency_relation || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; width: 25%;">Telefonu:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; width: 25%;">${student.emergency_phone || ''}</td>
+                            </tr>
+                            <tr>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">Adı Soyadı:</td>
+                                <td style="border: 1px solid #ccc; padding: 6px;" colspan="3">${student.emergency_contact || ''}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Velinin Muvafakati -->
+                    <div style="margin-bottom: 15px;">
+                        <h3 style="background: #dc2626; color: white; padding: 8px; margin: 0; font-size: 14px; text-align: center;">Velinin Muvafakati</h3>
+                        <div style="border: 1px solid #ccc; padding: 10px; font-size: 11px; line-height: 1.4; text-align: justify;">
+                            Velisi bulunduğum <strong>${new Date().toLocaleDateString('tr-TR')}</strong> Doğum tarihli <strong>${student.full_name || '[Öğrenci Adı]'}</strong> 'nın Atköyspor Kulübü Altyapısında yapılacağı olan antrenmanla, müsabakalara katılmasına rıza ederim. Bunlar sırasında ortaya çıkabilecek her türlü olumuz durumda Atköyspor Kulübünü sorumlu tutmayacağım peşinen ve gayrikabili rücu esasla beyan ederim.
+                        </div>
                         <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                             <tr>
-                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold; width: 30%;">Ad Soyad:</td>
-                                <td style="border: 1px solid #ccc; padding: 8px;">${student.full_name || ''}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">TC Kimlik No:</td>
-                                <td style="border: 1px solid #ccc; padding: 8px;">${student.tc_no || ''}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">Doğum Tarihi:</td>
-                                <td style="border: 1px solid #ccc; padding: 8px;">${student.birth_date || ''}</td>
-                            </tr>
-                            <tr>
-                                <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">Telefon:</td>
-                                <td style="border: 1px solid #ccc; padding: 8px;">${student.phone || ''}</td>
+                                <td style="border: 1px solid #ccc; padding: 20px; text-align: center; width: 25%;">
+                                    <strong>Veli Adı Soyadı:</strong><br>
+                                    ${student.father_name || student.mother_name || ''}
+                                </td>
+                                <td style="border: 1px solid #ccc; padding: 20px; text-align: center; width: 25%;">
+                                    <strong>Veli T.C. Kimlik:</strong><br>
+                                    _______________
+                                </td>
+                                <td style="border: 1px solid #ccc; padding: 20px; text-align: center; width: 25%;">
+                                    <strong>Tarih:</strong><br>
+                                    ${new Date().toLocaleDateString('tr-TR')}
+                                </td>
+                                <td style="border: 1px solid #ccc; padding: 20px; text-align: center; width: 25%;">
+                                    <strong>İmza:</strong><br>
+                                    <br><br>
+                                </td>
                             </tr>
                         </table>
                     </div>
