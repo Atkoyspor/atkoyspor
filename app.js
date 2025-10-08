@@ -6172,7 +6172,8 @@ if (student.sport && sportBranches.length > 0) {
                         @page { size: A4; margin: 10mm; }
                         body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.2; margin: 0; padding: 0; }
                         .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 2px solid #dc2626; padding-bottom: 6px; }
-                        .logo { width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; font-weight: bold; }
+                        .logo { width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; font-weight: bold; overflow: hidden; }
+                        .logo img { width: 60px; height: 60px; object-fit: contain; }
                         .title { flex: 1; text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; margin: 0 10px; }
                         .photo-box { width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; }
                         .section { margin-bottom: 8px; }
