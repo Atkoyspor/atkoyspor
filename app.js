@@ -6196,7 +6196,7 @@ if (student.sport && sportBranches.length > 0) {
                     <!-- Header -->
                     <div class="header">
                         <div class="logo">
-                            <img src="atkoy.jpeg" alt="ATKÖYSPOR KULÜBÜ" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖYSPOR<br>KULÜBÜ<br>LOGOSU';">
+                            <img src="atkoy.jpeg" alt="ATKÖYSPOR KULÜBÜ" style="width: 60px; height: 60px; object-fit: contain;" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖY<br>SPOR';">
                         </div>
                         <div class="title">
                             ATKÖYSPOR KULÜBÜ<br>
