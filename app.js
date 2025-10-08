@@ -6156,137 +6156,172 @@ if (student.sport && sportBranches.length > 0) {
         }
     }
 
-    // iOS Safari için özel print fonksiyonu - Windows kodunu aynen kullan
+    // iOS Safari için özel print fonksiyonu - POPUP WINDOW kullan
     printFormIOS(student) {
         try {
-            // Mevcut sayfada gizli div oluştur
-            const printDiv = document.createElement('div');
-            printDiv.id = 'ios-print-content';
-            printDiv.style.display = 'none';
+            // iOS Safari'de popup window oluştur (Windows gibi)
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
             
-            // Windows'da çalışan tam print içeriğini aynen kullan - TEK SAYFA
-            printDiv.innerHTML = `
-                <div style="font-family: Arial, sans-serif; font-size: 10px; line-height: 1.2; margin: 0; padding: 10px; max-width: 100%; box-sizing: border-box;">
+            if (!printWindow) {
+                alert('Popup engelleyici aktif. Lütfen popupları etkinleştirin.');
+                return;
+            }
+            
+            // Windows'da çalışan AYNI kodu kullan
+            const printContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>ATKÖYSPOR KULÜBÜ SPORCU KAYIT FORMU</title>
+                    <style>
+                        @page { size: A4; margin: 10mm; }
+                        body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.2; margin: 0; padding: 0; }
+                        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 2px solid #dc2626; padding-bottom: 6px; }
+                        .logo { width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; font-weight: bold; }
+                        .title { flex: 1; text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; margin: 0 10px; }
+                        .photo-box { width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; }
+                        .section { margin-bottom: 8px; }
+                        .section-title { background: #dc2626; color: white; padding: 7px; text-align: center; font-weight: bold; margin-bottom: 6px; font-size: 12px; -webkit-print-color-adjust: exact; color-adjust: exact; }
+                        .form-row { display: flex; margin-bottom: 5px; }
+                        .form-field { flex: 1; padding: 6px; border: 1px solid #ccc; margin-right: 4px; background: #f9f9f9; min-height: 18px; display: flex; align-items: center; font-size: 10px; }
+                        .form-field.address-field { min-height: 50px; padding: 8px; }
+                        .form-field.signature-field { min-height: 40px; padding: 10px; }
+                        .form-field:last-child { margin-right: 0; }
+                        .form-field strong { margin-right: 6px; font-weight: bold; }
+                        .full-width { width: 100%; }
+                        .consent-text { font-size: 11px; line-height: 1.3; text-align: justify; margin: 8px 0; }
+                        .signature-section { display: flex; justify-content: space-between; margin-top: 10px; }
+                        .signature-box { flex: 1; border: 1px solid #ccc; padding: 15px; margin-right: 5px; text-align: center; min-height: 40px; }
+                        .signature-box:last-child { margin-right: 0; }
+                        .footer { background: #dc2626; color: white; text-align: center; padding: 6px; margin-top: 10px; font-weight: bold; font-size: 10px; -webkit-print-color-adjust: exact; color-adjust: exact; }
+                    </style>
+                </head>
+                <body>
                     <!-- Header -->
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 2px solid #dc2626; padding-bottom: 6px;">
-                        <div style="width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; font-weight: bold;">
-                            <img src="atkoy.jpeg" alt="LOGO" style="width: 60px; height: 60px; object-fit: contain;" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖY<br>SPOR';">
+                    <div class="header">
+                        <div class="logo">
+                            <img src="atkoy.jpeg" alt="ATKÖYSPOR KULÜBÜ" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖYSPOR<br>KULÜBÜ<br>LOGOSU';">
                         </div>
-                        <div style="flex: 1; text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; margin: 0 10px;">
-                            ATKÖYSPOR KULÜBÜ<br>SPORCU KAYIT FORMU
+                        <div class="title">
+                            ATKÖYSPOR KULÜBÜ<br>
+                            SPORCU KAYIT FORMU
                         </div>
-                        <div style="width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px;">
-                            FOTOĞRAF
+                        <div class="photo-box">
+                            ${(student.photo_thumb_url || student.photo_url) ? `<img src="${student.photo_thumb_url || student.photo_url}" style="width: 70px; height: 70px; object-fit: cover;">` : '[photo_url]'}
                         </div>
                     </div>
     
                     <!-- Öğrenci Bilgileri -->
-                    <div style="margin-bottom: 6px;">
-                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Öğrenci Bilgileri</div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>TC Kimlik No:</strong> ${student.tcno || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Boy:</strong> ${student.height || ''}</div>
+                    <div class="section">
+                        <div class="section-title">Öğrenci Bilgileri</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>TC Kimlik No:</strong> ${student.tcno || '[tc_no]'}</div>
+                            <div class="form-field"><strong>Boy:</strong> ${student.height || '[height]'}</div>
                         </div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Adı Soyadı:</strong> ${student.name || ''} ${student.surname || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Kilo:</strong> ${student.weight || ''}</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>Adı Soyadı:</strong> ${student.name || '[first_name]'} ${student.surname || '[last_name]'}</div>
+                            <div class="form-field"><strong>Kilo:</strong> ${student.weight || '[weight]'}</div>
                         </div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Doğum Yeri ve Tarihi:</strong> ${student.birth_place || ''} / ${student.birth_date || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Kan Grubu:</strong> ${student.blood_type || ''}</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>Doğum Yeri ve Tarihi:</strong> ${student.birth_place || '[birth_place]'} / ${student.birth_date ? new Date(student.birth_date).toLocaleDateString('tr-TR') : '[birth_date]'}</div>
+                            <div class="form-field"><strong>Kan Grubu:</strong> ${student.blood_type || '[blood_type]'}</div>
                         </div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Okulu:</strong> ${student.school || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Öğrenci Tel:</strong> ${student.phone || ''}</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>Okulu:</strong> ${student.school || '[school]'}</div>
+                            <div class="form-field"><strong>Öğrenci Tel:</strong> ${student.phone || '[student_phone]'}</div>
                         </div>
                     </div>
     
                     <!-- Öğrenci Veli Bilgileri -->
-                    <div style="margin-bottom: 6px;">
-                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Öğrenci Veli Bilgileri</div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Baba Adı:</strong> ${student.father_name || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Telefonu:</strong> ${student.father_phone || ''}</div>
+                    <div class="section">
+                        <div class="section-title">Öğrenci Veli Bilgileri</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>Baba Adı:</strong> ${student.father_name || '[father_name]'}</div>
+                            <div class="form-field"><strong>Telefonu:</strong> ${student.father_phone || '[father_phone]'}</div>
                         </div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Anne Adı:</strong> ${student.mother_name || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Telefonu:</strong> ${student.mother_phone || ''}</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>Anne Adı:</strong> ${student.mother_name || '[mother_name]'}</div>
+                            <div class="form-field"><strong>Telefonu:</strong> ${student.mother_phone || '[mother_phone]'}</div>
                         </div>
-                        <div style="padding: 4px; border: 1px solid #ccc; font-size: 9px; margin-bottom: 3px;"><strong>Ev Adresi:</strong> ${student.address || ''}</div>
+                        <div class="form-row">
+                            <div class="form-field full-width address-field"><strong>Ev Adresi:</strong> ${student.address || '[address]'}</div>
+                        </div>
                     </div>
     
-                    <!-- Acil Durumlarda Ulaşılacak Kişiler -->
-                    <div style="margin-bottom: 6px;">
-                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Acil Durumlarda Veli Dışında Ulaşılabilecek Kişiler</div>
-                        <div style="display: flex; margin-bottom: 3px;">
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Yakınlık Derecesi:</strong> ${student.emergency_relation || ''}</div>
-                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Telefonu:</strong> ${student.emergency_phone || ''}</div>
+                    <!-- Acil Durumlarda Veli Dışında Ulaşılabilecek Kişiler -->
+                    <div class="section">
+                        <div class="section-title">Acil Durumlarda Veli Dışında Ulaşılabilecek Kişiler</div>
+                        <div class="form-row">
+                            <div class="form-field"><strong>Yakınlık Derecesi:</strong> ${student.emergency_relation || '[emergency_contact_relation]'}</div>
+                            <div class="form-field"><strong>Telefonu:</strong> ${student.emergency_phone || '[emergency_contact_phone]'}</div>
                         </div>
-                        <div style="padding: 4px; border: 1px solid #ccc; font-size: 9px; margin-bottom: 3px;"><strong>Adı Soyadı:</strong> ${student.emergency_name || ''}</div>
+                        <div class="form-row">
+                            <div class="form-field full-width"><strong>Adı Soyadı:</strong> ${student.emergency_name || '[emergency_contact_name]'}</div>
+                        </div>
                     </div>
     
                     <!-- Velinin Muvafakatı -->
-                    <div style="margin-bottom: 6px;">
-                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Velinin Muvafakatı</div>
-                        <div style="font-size: 8px; line-height: 1.2; text-align: justify; margin: 4px 0; padding: 4px; border: 1px solid #ccc;">
-                            Velisi bulunduğumuz <strong>${student.birth_date || ''}</strong> Doğum tarihli <strong>${student.name || ''} ${student.surname || ''}</strong> 'nın Atköyspor Kulübü Altyapısında yapılacağı olan antrenmanlarla, müsabakalarla katılımında rıza ederim. Bunlar sırasında ortaya çıkabilecek her türlü olumsuz durumda Atköyspor Kulübünü sorumlu tutmayacağım peşinen ve gayrikabili rücu esasla beyan ederim.
+                    <div class="section">
+                        <div class="section-title">Velinin Muvafakatı</div>
+                        <div class="consent-text">
+                            Velisi bulunduğumuz <strong>${student.birth_date ? new Date(student.birth_date).toLocaleDateString('tr-TR') : '[birth_date]'}</strong> Doğum tarihli <strong>${student.name || '[first_name]'} ${student.surname || '[last_name]'}</strong> 'nın Atköyspor Kulübü Altyapısında yapılacağı olarak, antrenmanlarla, müsabakalarla katılımında rıza ederim.
+                            <br><br>
+                            Yukarıda açık kimliği yazılı bulunan <strong>${student.name || '[first_name]'} ${student.surname || '[last_name]'}</strong> 'nın Atköyspor Kulübü Altyapısında yapılacağı olan antrenmanlarla, müsabakalarla katılımında rıza ederim. Bunlar sırasında ortaya çıkabilecek her türlü olumsuz durumda Atköyspor Kulübünü sorumlu tutmayacağım peşinen ve gayrikabili rücu esasla beyan ederim.
                         </div>
-                        <div style="display: flex; margin-top: 4px;">
-                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; margin-right: 2px; text-align: center; font-size: 8px;">
-                                <strong>Veli Adı Soyadı</strong><br>${student.father_name || ''}
+                        <div class="signature-section">
+                            <div class="signature-box">
+                                <strong>Veli Adı Soyadı</strong><br>
+                                ${student.father_name || '[father_name]'}
                             </div>
-                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; margin-right: 2px; text-align: center; font-size: 8px;">
-                                <strong>Veli T.C. Kimlik</strong><br>___________
+                            <div class="signature-box">
+                                <strong>Veli T.C. Kimlik</strong><br>
+                                ${student.father_tcno || '[father_tc_no]'}
                             </div>
-                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; margin-right: 2px; text-align: center; font-size: 8px;">
-                                <strong>Tarih</strong><br>${new Date().toLocaleDateString('tr-TR')}
+                            <div class="signature-box">
+                                <strong>Tarih</strong><br>
+                                ${new Date().toLocaleDateString('tr-TR')}
                             </div>
-                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 8px;">
-                                <strong>İmza</strong><br><br>
+                            <div class="signature-box">
+                                <strong>İmzası</strong>
                             </div>
+                        </div>
+                    </div>
+    
+                    <!-- Sağlık Beyannamesi -->
+                    <div class="section">
+                        <div class="section-title">Sağlık Beyannamesi</div>
+                        <div class="consent-text">
+                            Beyanlar kurulundaki çocuğumun spor yapmaya elverişli olduğunu ve tarafımızca da bu husus teşhis veya teşvik edilmiş bulunduğundan altyapı çalışmaları sırasında meydana gelebilecek sakatlık, hastalık, yaralanma ve bunlar sırasında ortaya çıkabilecek her türlü olumsuz durumda Atköyspor Kulübünü sorumlu tutmayacağım peşinen ve gayrikabili rücu esasla beyan ederim.
+                        </div>
+                        <div class="form-row">
+                            <div class="form-field signature-field"><strong>Veli Adı Soyadı:</strong> ${student.father_name || '[father_name]'}</div>
+                            <div class="form-field signature-field"><strong>İmza:</strong></div>
                         </div>
                     </div>
     
                     <!-- Footer -->
-                    <div style="background: #dc2626; color: white; text-align: center; padding: 4px; margin-top: 6px; font-weight: bold; font-size: 8px;">
+                    <div class="footer">
                         Aşağıdaki Bölüm Atköyspor Kulübü Tarafından Doldurulacaktır.
+                    </div>    
+                    <div class="form-row" style="margin-top: 6px;">
+                        <div class="form-field"><strong>Kayıt Yapanın Adı Soyadı:</strong> ${(() => {
+                            const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+                            return currentUser.name || 'Admin';
+                        })()}</div>
+                        <div class="form-field"><strong>Yaş Grubu:</strong> ${student.age_group || '[age_group]'}</div>
                     </div>
-                    <div style="display: flex; margin-top: 4px;">
-                        <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Kayıt Yapan:</strong> Admin</div>
-                        <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Yaş Grubu:</strong> ${student.age_group || ''}</div>
-                    </div>
-                </div>
+                </body>
+                </html>
             `;
+    
+            printWindow.document.write(printContent);
+            printWindow.document.close();
             
-            document.body.appendChild(printDiv);
-            
-            // Print CSS ekle
-            const printStyle = document.createElement('style');
-            printStyle.innerHTML = `
-                @media print {
-                    body * { visibility: hidden; }
-                    #ios-print-content, #ios-print-content * { visibility: visible; }
-                    #ios-print-content { 
-                        position: absolute; 
-                        left: 0; 
-                        top: 0; 
-                        width: 100%; 
-                        display: block !important;
-                    }
-                }
-            `;
-            document.head.appendChild(printStyle);
-            
-            // Print dialog aç
+            // Yazdırma diyaloğunu aç
             setTimeout(() => {
-                window.print();
-                
-                // Temizlik
-                setTimeout(() => {
-                    document.body.removeChild(printDiv);
-                    document.head.removeChild(printStyle);
-                }, 1000);
-            }, 100);
+                printWindow.print();
+            }, 500);
             
         } catch (error) {
             console.error('iOS print error:', error);
