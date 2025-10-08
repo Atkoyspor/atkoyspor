@@ -6156,16 +6156,10 @@ if (student.sport && sportBranches.length > 0) {
         }
     }
 
-    // iOS Safari için özel print fonksiyonu - POPUP WINDOW kullan
+    // iOS Safari için özel print fonksiyonu - BLOB URL kullan
     printFormIOS(student) {
         try {
-            // iOS Safari'de popup window oluştur (Windows gibi)
-            const printWindow = window.open('', '_blank', 'width=800,height=600');
-            
-            if (!printWindow) {
-                alert('Popup engelleyici aktif. Lütfen popupları etkinleştirin.');
-                return;
-            }
+            // iOS Safari için blob URL yöntemi kullan
             
             // Windows'da çalışan AYNI kodu kullan
             const printContent = `
@@ -6315,13 +6309,25 @@ if (student.sport && sportBranches.length > 0) {
                 </html>
             `;
     
-            printWindow.document.write(printContent);
-            printWindow.document.close();
+            // Blob oluştur ve URL'ye çevir
+            const blob = new Blob([printContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
             
-            // Yazdırma diyaloğunu aç
+            // Yeni sekmede aç (iOS Safari uyumlu)
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.download = 'sporcu_kayit_formu.html';
+            
+            // Programmatik tıklama
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // URL'yi temizle
             setTimeout(() => {
-                printWindow.print();
-            }, 500);
+                URL.revokeObjectURL(url);
+            }, 1000);
             
         } catch (error) {
             console.error('iOS print error:', error);
