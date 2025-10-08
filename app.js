@@ -6309,25 +6309,79 @@ if (student.sport && sportBranches.length > 0) {
                 </html>
             `;
     
-            // Blob oluştur ve URL'ye çevir
-            const blob = new Blob([printContent], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
+            // iOS Safari için iframe ön izleme yöntemi
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.top = '0';
+            iframe.style.left = '0';
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.zIndex = '9999';
+            iframe.style.backgroundColor = 'white';
+            iframe.style.border = 'none';
             
-            // Yeni sekmede aç (iOS Safari uyumlu)
-            const link = document.createElement('a');
-            link.href = url;
-            link.target = '_blank';
-            link.download = 'sporcu_kayit_formu.html';
+            // Kapatma butonu ekle
+            const closeBtn = document.createElement('button');
+            closeBtn.innerHTML = '✕ Kapat';
+            closeBtn.style.position = 'fixed';
+            closeBtn.style.top = '10px';
+            closeBtn.style.right = '10px';
+            closeBtn.style.zIndex = '10000';
+            closeBtn.style.padding = '10px 15px';
+            closeBtn.style.backgroundColor = '#dc2626';
+            closeBtn.style.color = 'white';
+            closeBtn.style.border = 'none';
+            closeBtn.style.borderRadius = '5px';
+            closeBtn.style.fontSize = '14px';
+            closeBtn.style.cursor = 'pointer';
             
-            // Programmatik tıklama
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Print butonu ekle
+            const printBtn = document.createElement('button');
+            printBtn.innerHTML = '🖨️ Yazdır';
+            printBtn.style.position = 'fixed';
+            printBtn.style.top = '10px';
+            printBtn.style.right = '80px';
+            printBtn.style.zIndex = '10000';
+            printBtn.style.padding = '10px 15px';
+            printBtn.style.backgroundColor = '#059669';
+            printBtn.style.color = 'white';
+            printBtn.style.border = 'none';
+            printBtn.style.borderRadius = '5px';
+            printBtn.style.fontSize = '14px';
+            printBtn.style.cursor = 'pointer';
             
-            // URL'yi temizle
+            // Event listeners
+            closeBtn.onclick = () => {
+                document.body.removeChild(iframe);
+                document.body.removeChild(closeBtn);
+                document.body.removeChild(printBtn);
+                document.body.style.overflow = 'auto';
+            };
+            
+            printBtn.onclick = () => {
+                iframe.contentWindow.print();
+            };
+            
+            // Iframe'e içeriği yükle
+            document.body.appendChild(iframe);
+            document.body.appendChild(closeBtn);
+            document.body.appendChild(printBtn);
+            document.body.style.overflow = 'hidden';
+            
+            iframe.onload = () => {
+                iframe.contentDocument.open();
+                iframe.contentDocument.write(printContent);
+                iframe.contentDocument.close();
+            };
+            
+            // Fallback: direkt write
             setTimeout(() => {
-                URL.revokeObjectURL(url);
-            }, 1000);
+                if (iframe.contentDocument) {
+                    iframe.contentDocument.open();
+                    iframe.contentDocument.write(printContent);
+                    iframe.contentDocument.close();
+                }
+            }, 100);
             
         } catch (error) {
             console.error('iOS print error:', error);
