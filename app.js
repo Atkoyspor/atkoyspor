@@ -6159,6 +6159,108 @@ if (student.sport && sportBranches.length > 0) {
     // iOS Safari için özel print fonksiyonu - Windows kodunu aynen kullan
     printFormIOS(student) {
         try {
+            // Mevcut sayfada gizli div oluştur
+            const printDiv = document.createElement('div');
+            printDiv.id = 'ios-print-content';
+            printDiv.style.display = 'none';
+            
+            // Windows'da çalışan tam print içeriğini aynen kullan - TEK SAYFA
+            printDiv.innerHTML = `
+                <div style="font-family: Arial, sans-serif; font-size: 10px; line-height: 1.2; margin: 0; padding: 10px; max-width: 100%; box-sizing: border-box;">
+                    <!-- Header -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 2px solid #dc2626; padding-bottom: 6px;">
+                        <div style="width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; font-weight: bold;">
+                            <img src="atkoy.jpeg" alt="LOGO" style="width: 60px; height: 60px; object-fit: contain;" onerror="this.style.display='none'; this.parentElement.innerHTML='ATKÖY<br>SPOR';">
+                        </div>
+                        <div style="flex: 1; text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; margin: 0 10px;">
+                            ATKÖYSPOR KULÜBÜ<br>SPORCU KAYIT FORMU
+                        </div>
+                        <div style="width: 70px; height: 70px; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 8px;">
+                            FOTOĞRAF
+                        </div>
+                    </div>
+    
+                    <!-- Öğrenci Bilgileri -->
+                    <div style="margin-bottom: 6px;">
+                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Öğrenci Bilgileri</div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>TC Kimlik No:</strong> ${student.tcno || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Boy:</strong> ${student.height || ''}</div>
+                        </div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Adı Soyadı:</strong> ${student.name || ''} ${student.surname || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Kilo:</strong> ${student.weight || ''}</div>
+                        </div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Doğum Yeri ve Tarihi:</strong> ${student.birth_place || ''} / ${student.birth_date || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Kan Grubu:</strong> ${student.blood_type || ''}</div>
+                        </div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Okulu:</strong> ${student.school || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Öğrenci Tel:</strong> ${student.phone || ''}</div>
+                        </div>
+                    </div>
+    
+                    <!-- Öğrenci Veli Bilgileri -->
+                    <div style="margin-bottom: 6px;">
+                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Öğrenci Veli Bilgileri</div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Baba Adı:</strong> ${student.father_name || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Telefonu:</strong> ${student.father_phone || ''}</div>
+                        </div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Anne Adı:</strong> ${student.mother_name || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Telefonu:</strong> ${student.mother_phone || ''}</div>
+                        </div>
+                        <div style="padding: 4px; border: 1px solid #ccc; font-size: 9px; margin-bottom: 3px;"><strong>Ev Adresi:</strong> ${student.address || ''}</div>
+                    </div>
+    
+                    <!-- Acil Durumlarda Ulaşılacak Kişiler -->
+                    <div style="margin-bottom: 6px;">
+                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Acil Durumlarda Veli Dışında Ulaşılabilecek Kişiler</div>
+                        <div style="display: flex; margin-bottom: 3px;">
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Yakınlık Derecesi:</strong> ${student.emergency_relation || ''}</div>
+                            <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Telefonu:</strong> ${student.emergency_phone || ''}</div>
+                        </div>
+                        <div style="padding: 4px; border: 1px solid #ccc; font-size: 9px; margin-bottom: 3px;"><strong>Adı Soyadı:</strong> ${student.emergency_name || ''}</div>
+                    </div>
+    
+                    <!-- Velinin Muvafakatı -->
+                    <div style="margin-bottom: 6px;">
+                        <div style="background: #dc2626; color: white; padding: 4px; text-align: center; font-weight: bold; margin-bottom: 4px; font-size: 10px;">Velinin Muvafakatı</div>
+                        <div style="font-size: 8px; line-height: 1.2; text-align: justify; margin: 4px 0; padding: 4px; border: 1px solid #ccc;">
+                            Velisi bulunduğumuz <strong>${student.birth_date || ''}</strong> Doğum tarihli <strong>${student.name || ''} ${student.surname || ''}</strong> 'nın Atköyspor Kulübü Altyapısında yapılacağı olan antrenmanlarla, müsabakalarla katılımında rıza ederim. Bunlar sırasında ortaya çıkabilecek her türlü olumsuz durumda Atköyspor Kulübünü sorumlu tutmayacağım peşinen ve gayrikabili rücu esasla beyan ederim.
+                        </div>
+                        <div style="display: flex; margin-top: 4px;">
+                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; margin-right: 2px; text-align: center; font-size: 8px;">
+                                <strong>Veli Adı Soyadı</strong><br>${student.father_name || ''}
+                            </div>
+                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; margin-right: 2px; text-align: center; font-size: 8px;">
+                                <strong>Veli T.C. Kimlik</strong><br>___________
+                            </div>
+                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; margin-right: 2px; text-align: center; font-size: 8px;">
+                                <strong>Tarih</strong><br>${new Date().toLocaleDateString('tr-TR')}
+                            </div>
+                            <div style="flex: 1; border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 8px;">
+                                <strong>İmza</strong><br><br>
+                            </div>
+                        </div>
+                    </div>
+    
+                    <!-- Footer -->
+                    <div style="background: #dc2626; color: white; text-align: center; padding: 4px; margin-top: 6px; font-weight: bold; font-size: 8px;">
+                        Aşağıdaki Bölüm Atköyspor Kulübü Tarafından Doldurulacaktır.
+                    </div>
+                    <div style="display: flex; margin-top: 4px;">
+                        <div style="flex: 1; padding: 4px; border: 1px solid #ccc; margin-right: 2px; font-size: 9px;"><strong>Kayıt Yapan:</strong> Admin</div>
+                        <div style="flex: 1; padding: 4px; border: 1px solid #ccc; font-size: 9px;"><strong>Yaş Grubu:</strong> ${student.age_group || ''}</div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(printDiv);
+            
+            // Print CSS ekle
             const printStyle = document.createElement('style');
             printStyle.innerHTML = `
                 @media print {
