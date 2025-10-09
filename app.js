@@ -10,6 +10,7 @@ class SportsManagementApp {
         this.weeklyTrainingsChart = null;
         this.currentDate = new Date();
         this.currentChartType = 'pie'; // Track current chart type
+        this.trackingYear = new Date().getFullYear(); // Ödeme takip yılı
         this.initializeApp();this.currentChartType = 'pie';
         this.sportColorMap = {}; // YENİ: Spor renk haritasını burada saklayacağız
         this._equipSearchDebounce = null; // debounce timer for equipment student search
@@ -1388,6 +1389,8 @@ if (studentId) {
     // Gelecek dönem ödenmemiş aidatları yeni indirim oranına göre güncelle
     try { await supabaseService.recalculateFuturePaymentsForStudent(studentId); } catch (_) {}
     
+    // Spor branşı değişmişse mevcut aya ait borç kaydını güncelle
+    await this.updateCurrentMonthPaymentForStudent(studentId, studentData.sport);
     
     // Her zaman ödeme ekranını yenile (spor branşı değişmiş olabilir)
     
@@ -1499,7 +1502,20 @@ if (studentId) {
         await this.loadStudentDistribution(); // loadSportsChart yerine bunu çağır
         await this.loadPaymentsChart();
         await this.loadWeeklyTrainings();
-        await this.loadRecentActivities();      
+        await this.loadRecentActivities();
+        
+        // Otomatik aylık borç sistemini başlat
+        await this.setupAutomaticMonthlyDebts();
+        
+        // Global fonksiyonları tanımla (console'dan çağırılabilir)
+        window.createMonthlyDebts = () => this.createMonthlyDebtsForActiveStudents();
+        window.createNextMonthDebt = () => this.createNextMonthDebt();
+        window.setupAutomaticDebts = () => this.setupAutomaticMonthlyDebts();
+        
+        console.log('💡 Borç oluşturma fonksiyonları hazır:');
+        console.log('   - createMonthlyDebts() → Mevcut ay için borç oluştur');
+        console.log('   - createNextMonthDebt() → Gelecek ay için borç oluştur');
+        console.log('   - setupAutomaticDebts() → Otomatik aylık borç sistemini başlat');
     }
 
     async updateDashboardStats() {
@@ -3091,6 +3107,7 @@ if (studentId) {
                         <button class="payment-tab-btn" data-tab="upcoming">Yaklaşan Ödemeler</button>
                         <button class="payment-tab-btn" data-tab="payers">Ödeyen Öğrenciler</button>
                         <button class="payment-tab-btn" data-tab="equipment">Ekipman Ödemeleri</button>
+                        <button class="payment-tab-btn" data-tab="tracking">📊 Ödeme Takip</button>
                     </div>
                     <div class="payments-search" style="position: relative; max-width: 360px; width: 100%; min-width: 220px;">
                         <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF;"></i>
@@ -3164,11 +3181,31 @@ if (studentId) {
         switch (tab) {
             case 'overdue':
                 filteredPayments = payments.filter(p => {
-                    if (p.is_paid) return false;
-                    if (!p.due_date) return false;
-                    const dueDate = new Date(p.due_date);
-                    dueDate.setHours(0, 0, 0, 0);
-                    return dueDate < today;
+                    if (p.is_paid) return false; // Ödenmiş olanları hariç tut
+                    
+                    // Geçmiş aylara ait borçları kontrol et
+                    if (p.period_year && p.period_month) {
+                        const currentDate = new Date();
+                        const currentYear = currentDate.getFullYear();
+                        const currentMonth = currentDate.getMonth() + 1; // 1-12 arası
+                        
+                        // Geçmiş yıl veya geçmiş ay ise gecikmiş
+                        if (p.period_year < currentYear) {
+                            return true; // Geçmiş yıl
+                        } else if (p.period_year === currentYear && p.period_month < currentMonth) {
+                            return true; // Bu yıl ama geçmiş ay
+                        }
+                        return false; // Mevcut ay veya gelecek
+                    }
+                    
+                    // Eski sistem: due_date kontrolü (period_month olmayan kayıtlar için)
+                    if (p.due_date) {
+                        const dueDate = new Date(p.due_date);
+                        dueDate.setHours(0, 0, 0, 0);
+                        return dueDate < today;
+                    }
+                    
+                    return false;
                 });
                 break;
             case 'upcoming':
@@ -3186,6 +3223,9 @@ if (studentId) {
             case 'equipment':
                 filteredPayments = payments.filter(p => !!p.equipment_assignment_id);
                 break;
+            case 'tracking':
+                // Ödeme takip tablosu için özel render
+                return this.generatePaymentTrackingTable(students, payments);
             default:
                 filteredPayments = payments;
         }
@@ -6394,6 +6434,606 @@ if (student.sport && sportBranches.length > 0) {
         if (!this.sportBranches) return null;
         const branch = this.sportBranches.find(b => b.name === sportName);
         return branch ? branch.fee : null;
+    }
+
+    async updateCurrentMonthPaymentForStudent(studentId, newSport) {
+        try {
+            console.log(`🔄 ${studentId} öğrencisinin mevcut ay borcu güncelleniyor...`);
+            
+            const currentDate = new Date();
+            const currentYear = currentDate.getFullYear();
+            const currentMonth = currentDate.getMonth() + 1; // 1-12 arası
+            
+            // Öğrencinin bilgilerini al (indirim oranı için)
+            const { data: studentData, error: studentError } = await supabaseService.supabase
+                .from('students')
+                .select('discount_rate')
+                .eq('id', studentId)
+                .single();
+            
+            if (studentError) {
+                console.error('❌ Öğrenci bilgileri alınamadı:', studentError);
+                return;
+            }
+            
+            // Spor branşının base ücretini al
+            const baseFee = this.getSportBranchFee(newSport) || 1000; // Varsayılan 1000 TL
+            
+            // İndirim oranını uygula
+            const discountRate = studentData.discount_rate || 0;
+            const discountAmount = (baseFee * discountRate) / 100;
+            const finalFee = baseFee - discountAmount;
+            
+            console.log(`💰 Ücret hesaplama: ${baseFee} TL - %${discountRate} indirim = ${finalFee} TL`);
+            
+            // Mevcut aya ait ödenmemiş borç kaydını bul
+            const { data: existingPayments, error: fetchError } = await supabaseService.supabase
+                .from('payments')
+                .select('*')
+                .eq('student_id', studentId)
+                .eq('period_year', currentYear)
+                .eq('period_month', currentMonth)
+                .eq('is_paid', false)
+                .is('equipment_assignment_id', null);
+            
+            if (fetchError) {
+                console.error('❌ Mevcut borç kaydı sorgulanırken hata:', fetchError);
+                return;
+            }
+            
+            if (existingPayments && existingPayments.length > 0) {
+                // Mevcut borç kaydını güncelle
+                const payment = existingPayments[0];
+                const { error: updateError } = await supabaseService.supabase
+                    .from('payments')
+                    .update({
+                        amount: finalFee
+                    })
+                    .eq('id', payment.id);
+                
+                if (updateError) {
+                    console.error('❌ Borç kaydı güncellenirken hata:', updateError);
+                } else {
+                    console.log(`✅ Mevcut ay borcu güncellendi: ${payment.amount} TL → ${finalFee} TL`);
+                }
+            } else {
+                // Mevcut aya ait borç kaydı yoksa yeni oluştur
+                const dueDate = new Date(currentYear, currentMonth - 1, 1); // Ayın 1. günü
+                const dueDateStr = dueDate.toISOString().split('T')[0];
+                
+                const { error: insertError } = await supabaseService.supabase
+                    .from('payments')
+                    .insert({
+                        student_id: studentId,
+                        amount: finalFee,
+                        payment_date: dueDateStr,
+                        is_paid: false,
+                        equipment_assignment_id: null,
+                        period_month: currentMonth,
+                        period_year: currentYear,
+                        created_at: new Date().toISOString()
+                    });
+                
+                if (insertError) {
+                    console.error('❌ Yeni borç kaydı oluşturulurken hata:', insertError);
+                } else {
+                    console.log(`✅ Yeni borç kaydı oluşturuldu: ${finalFee} TL`);
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Mevcut ay borcu güncelleme hatası:', error);
+        }
+    }
+
+    async createMonthlyDebtsForActiveStudents() {
+        try {
+            console.log('🔄 Aktif öğrenciler için aylık borç oluşturuluyor...');
+            
+            const currentDate = new Date();
+            const currentYear = currentDate.getFullYear();
+            const currentMonth = currentDate.getMonth() + 1; // 1-12 arası
+            
+            // Aktif öğrencileri al
+            const { data: activeStudents, error: studentsError } = await supabaseService.supabase
+                .from('students')
+                .select('*')
+                .eq('status', 'active')
+                .neq('deleted', true);
+            
+            if (studentsError) {
+                console.error('❌ Aktif öğrenciler alınamadı:', studentsError);
+                return;
+            }
+            
+            console.log(`📊 ${activeStudents.length} aktif öğrenci bulundu`);
+            
+            // Her aktif öğrenci için borç kontrolü
+            for (const student of activeStudents) {
+                try {
+                    // Bu öğrencinin mevcut aya ait borcu var mı kontrol et
+                    const { data: existingPayments, error: paymentError } = await supabaseService.supabase
+                        .from('payments')
+                        .select('id')
+                        .eq('student_id', student.id)
+                        .eq('period_year', currentYear)
+                        .eq('period_month', currentMonth)
+                        .is('equipment_assignment_id', null);
+                    
+                    if (paymentError) {
+                        console.error(`❌ ${student.name} ${student.surname} için borç kontrolü hatası:`, paymentError);
+                        continue;
+                    }
+                    
+                    // Eğer bu ay için borç kaydı yoksa oluştur
+                    if (!existingPayments || existingPayments.length === 0) {
+                        // Spor branşı ücretini al
+                        const baseFee = this.getSportBranchFee(student.sport) || 1000;
+                        
+                        // İndirim oranını uygula
+                        const discountRate = student.discount_rate || 0;
+                        const discountAmount = (baseFee * discountRate) / 100;
+                        const finalFee = baseFee - discountAmount;
+                        
+                        // Borç kaydı oluştur
+                        const dueDate = new Date(currentYear, currentMonth - 1, 1); // Ayın 1. günü
+                        const dueDateStr = dueDate.toISOString().split('T')[0];
+                        
+                        const { error: insertError } = await supabaseService.supabase
+                            .from('payments')
+                            .insert({
+                                student_id: student.id,
+                                amount: finalFee,
+                                payment_date: dueDateStr,
+                                is_paid: false,
+                                equipment_assignment_id: null,
+                                period_month: currentMonth,
+                                period_year: currentYear,
+                                created_at: new Date().toISOString()
+                            });
+                        
+                        if (insertError) {
+                            console.error(`❌ ${student.name} ${student.surname} için borç oluşturma hatası:`, insertError);
+                        } else {
+                            console.log(`✅ ${student.name} ${student.surname} - ${currentMonth}. ay: ${finalFee} TL borç oluşturuldu`);
+                        }
+                    } else {
+                        console.log(`ℹ️ ${student.name} ${student.surname} - ${currentMonth}. ay borcu zaten mevcut`);
+                    }
+                    
+                } catch (studentError) {
+                    console.error(`❌ ${student.name} ${student.surname} için işlem hatası:`, studentError);
+                }
+            }
+            
+            console.log('✅ Aylık borç oluşturma işlemi tamamlandı');
+            
+        } catch (error) {
+            console.error('❌ Aylık borç oluşturma genel hatası:', error);
+        }
+    }
+
+    async setupAutomaticMonthlyDebts() {
+        try {
+            console.log('🔄 Otomatik aylık borç sistemi kuruluyor...');
+            
+            // Her ayın 1. günü çalışacak otomatik sistem
+            const checkAndCreateDebts = async () => {
+                const currentDate = new Date();
+                const currentDay = currentDate.getDate();
+                
+                // Sadece ayın 1. günü çalış
+                if (currentDay === 1) {
+                    console.log('📅 Ayın 1. günü - Otomatik borç oluşturma başlıyor...');
+                    await this.createMonthlyDebtsForActiveStudents();
+                } else {
+                    console.log(`ℹ️ Bugün ${currentDay}. gün - Otomatik borç oluşturma sadece ayın 1. günü çalışır`);
+                }
+            };
+            
+            // İlk çalıştırma
+            await checkAndCreateDebts();
+            
+            // Her gün kontrol et (24 saat = 86400000 ms)
+            setInterval(checkAndCreateDebts, 24 * 60 * 60 * 1000);
+            
+            console.log('✅ Otomatik aylık borç sistemi kuruldu - Her ayın 1. günü çalışacak');
+            
+        } catch (error) {
+            console.error('❌ Otomatik borç sistemi kurulum hatası:', error);
+        }
+    }
+
+    async createNextMonthDebt() {
+        try {
+            console.log('🔄 Gelecek ay için borç oluşturuluyor...');
+            
+            const currentDate = new Date();
+            const nextMonth = currentDate.getMonth() + 2; // Gelecek ay (0-11 + 2)
+            const nextYear = nextMonth > 12 ? currentDate.getFullYear() + 1 : currentDate.getFullYear();
+            const finalMonth = nextMonth > 12 ? 1 : nextMonth;
+            
+            console.log(`📅 ${finalMonth}. ay ${nextYear} için borç oluşturuluyor...`);
+            
+            // Aktif öğrencileri al
+            const { data: activeStudents, error: studentsError } = await supabaseService.supabase
+                .from('students')
+                .select('*')
+                .eq('status', 'active')
+                .neq('deleted', true);
+            
+            if (studentsError) {
+                console.error('❌ Aktif öğrenciler alınamadı:', studentsError);
+                return;
+            }
+            
+            console.log(`📊 ${activeStudents.length} aktif öğrenci için gelecek ay borcu oluşturuluyor`);
+            
+            // Her aktif öğrenci için gelecek ay borcu oluştur
+            for (const student of activeStudents) {
+                try {
+                    // Gelecek ay için borç kaydı var mı kontrol et
+                    const { data: existingPayments, error: paymentError } = await supabaseService.supabase
+                        .from('payments')
+                        .select('id')
+                        .eq('student_id', student.id)
+                        .eq('period_year', nextYear)
+                        .eq('period_month', finalMonth)
+                        .is('equipment_assignment_id', null);
+                    
+                    if (paymentError) {
+                        console.error(`❌ ${student.name} ${student.surname} gelecek ay borç kontrolü hatası:`, paymentError);
+                        continue;
+                    }
+                    
+                    // Eğer gelecek ay için borç kaydı yoksa oluştur
+                    if (!existingPayments || existingPayments.length === 0) {
+                        // Spor branşı ücretini al
+                        const baseFee = this.getSportBranchFee(student.sport) || 1000;
+                        
+                        // İndirim oranını uygula
+                        const discountRate = student.discount_rate || 0;
+                        const discountAmount = (baseFee * discountRate) / 100;
+                        const finalFee = baseFee - discountAmount;
+                        
+                        // Borç kaydı oluştur (gelecek ayın 1. günü)
+                        const dueDate = new Date(nextYear, finalMonth - 1, 1);
+                        const dueDateStr = dueDate.toISOString().split('T')[0];
+                        
+                        const { error: insertError } = await supabaseService.supabase
+                            .from('payments')
+                            .insert({
+                                student_id: student.id,
+                                amount: finalFee,
+                                payment_date: dueDateStr,
+                                is_paid: false,
+                                equipment_assignment_id: null,
+                                period_month: finalMonth,
+                                period_year: nextYear,
+                                created_at: new Date().toISOString()
+                            });
+                        
+                        if (insertError) {
+                            console.error(`❌ ${student.name} ${student.surname} gelecek ay borç oluşturma hatası:`, insertError);
+                        } else {
+                            console.log(`✅ ${student.name} ${student.surname} - ${finalMonth}/${nextYear}: ${finalFee} TL borç oluşturuldu`);
+                        }
+                    } else {
+                        console.log(`ℹ️ ${student.name} ${student.surname} - ${finalMonth}/${nextYear} borcu zaten mevcut`);
+                    }
+                    
+                } catch (studentError) {
+                    console.error(`❌ ${student.name} ${student.surname} gelecek ay işlem hatası:`, studentError);
+                }
+            }
+            
+            console.log('✅ Gelecek ay borç oluşturma tamamlandı');
+            
+        } catch (error) {
+            console.error('❌ Gelecek ay borç oluşturma genel hatası:', error);
+        }
+    }
+
+    generatePaymentTrackingTable(students, payments) {
+        // Takip edilen yıl (varsayılan olarak mevcut yıl)
+        const currentYear = this.trackingYear || new Date().getFullYear();
+        
+        // Ay isimleri
+        const months = [
+            'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+            'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+        ];
+        
+        // Öğrenci bazında ödeme verilerini organize et
+        const studentPayments = {};
+        students.forEach(student => {
+            studentPayments[student.id] = {
+                student: student,
+                monthlyPayments: new Array(12).fill(null), // 12 ay için
+                equipmentPayments: [],
+                totalPaid: 0
+            };
+        });
+        
+        // Ödemeleri aylara göre dağıt
+        payments.forEach(payment => {
+            if (payment.student_id && studentPayments[payment.student_id]) {
+                if (payment.equipment_assignment_id) {
+                    // Ekipman ödemesi
+                    studentPayments[payment.student_id].equipmentPayments.push(payment);
+                    if (payment.is_paid) {
+                        studentPayments[payment.student_id].totalPaid += payment.amount || 0;
+                    }
+                } else if (payment.period_year === currentYear && payment.period_month) {
+                    // Aylık ödeme
+                    const monthIndex = payment.period_month - 1; // 0-11 arası
+                    if (monthIndex >= 0 && monthIndex < 12) {
+                        if (!studentPayments[payment.student_id].monthlyPayments[monthIndex]) {
+                            studentPayments[payment.student_id].monthlyPayments[monthIndex] = [];
+                        }
+                        studentPayments[payment.student_id].monthlyPayments[monthIndex].push(payment);
+                        
+                        if (payment.is_paid) {
+                            studentPayments[payment.student_id].totalPaid += payment.amount || 0;
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Aylık toplamları hesapla
+        const monthlyTotals = new Array(12).fill(0);
+        let equipmentTotal = 0;
+        let grandTotal = 0;
+        
+        Object.values(studentPayments).forEach(studentData => {
+            // Aylık ödemeler
+            studentData.monthlyPayments.forEach((monthPayments, monthIndex) => {
+                if (monthPayments) {
+                    monthPayments.forEach(payment => {
+                        if (payment.is_paid) {
+                            monthlyTotals[monthIndex] += payment.amount || 0;
+                        }
+                    });
+                }
+            });
+            
+            // Ekipman ödemeleri
+            studentData.equipmentPayments.forEach(payment => {
+                if (payment.is_paid) {
+                    equipmentTotal += payment.amount || 0;
+                }
+            });
+            
+            grandTotal += studentData.totalPaid;
+        });
+        
+        return `
+            <div class="payment-tracking-container" style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <!-- Yıl Navigasyonu -->
+                <div class="year-navigation" style="display: flex; align-items: center; justify-content: center; margin-bottom: 25px; gap: 20px;">
+                    <button onclick="app.changeTrackingYear(-1)" style="
+                        background: #3b82f6; 
+                        color: white; 
+                        border: none; 
+                        padding: 12px 16px; 
+                        border-radius: 10px; 
+                        cursor: pointer; 
+                        font-size: 18px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        transition: all 0.2s;
+                        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+                    " onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h2 style="margin: 0; font-size: 32px; font-weight: 700; color: #1f2937; min-width: 120px; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                        📅 ${currentYear}
+                    </h2>
+                    <button onclick="app.changeTrackingYear(1)" style="
+                        background: #3b82f6; 
+                        color: white; 
+                        border: none; 
+                        padding: 12px 16px; 
+                        border-radius: 10px; 
+                        cursor: pointer; 
+                        font-size: 18px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        transition: all 0.2s;
+                        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+                    " onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                
+                <!-- Ödeme Takip Tablosu -->
+                <div class="tracking-table-wrapper" style="overflow-x: auto; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <table style="width: 100%; border-collapse: collapse; min-width: 1200px; font-size: 12px; background: white;">
+                        <!-- Başlık Satırı -->
+                        <thead>
+                            <tr style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);">
+                                <th style="padding: 12px; text-align: left; font-weight: 700; color: #374151; border-bottom: 2px solid #e5e7eb; min-width: 140px; font-size: 14px; position: sticky; left: 0; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); z-index: 10;">
+                                    👥 Öğrenciler
+                                </th>
+                                ${months.map((month, index) => `
+                                    <th style="padding: 8px; text-align: center; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb; min-width: 70px; font-size: 11px;">
+                                        ${month.substring(0, 3)}
+                                    </th>
+                                `).join('')}
+                                <th style="padding: 8px; text-align: center; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb; min-width: 70px; font-size: 11px;">
+                                    🛠️ Ekip
+                                </th>
+                                <th style="padding: 12px; text-align: center; font-weight: 700; color: #374151; border-bottom: 2px solid #e5e7eb; min-width: 90px; font-size: 14px;">
+                                    💰 Toplam
+                                </th>
+                            </tr>
+                        </thead>
+                        
+                        <!-- Öğrenci Satırları -->
+                        <tbody>
+                            ${Object.values(studentPayments).map(studentData => {
+                                const student = studentData.student;
+                                const studentName = `${student.name || ''} ${student.surname || ''}`.trim();
+                                
+                                const monthCells = studentData.monthlyPayments.map((monthPayments, monthIndex) => {
+                                    let cellContent = '';
+                                    let cellStyle = 'padding: 6px; text-align: center; border-bottom: 1px solid #f3f4f6; font-size: 11px; font-weight: 600; transition: all 0.2s;';
+                                    
+                                    if (monthPayments && monthPayments.length > 0) {
+                                        let totalAmount = 0;
+                                        let paidAmount = 0;
+                                        
+                                        monthPayments.forEach(payment => {
+                                            const amount = payment.amount || 0;
+                                            totalAmount += amount;
+                                            if (payment.is_paid) {
+                                                paidAmount += amount;
+                                            }
+                                        });
+                                        
+                                        if (paidAmount === totalAmount && paidAmount > 0) {
+                                            // Tamamen ödendi
+                                            cellContent = `${paidAmount}`;
+                                            cellStyle += ' background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;';
+                                        } else if (paidAmount > 0) {
+                                            // Kısmi ödeme
+                                            cellContent = `${paidAmount}/${totalAmount}`;
+                                            cellStyle += ' background: #fef3c7; color: #92400e; border: 1px solid #fde68a;';
+                                        } else {
+                                            // Ödenmedi
+                                            cellContent = `${totalAmount}`;
+                                            cellStyle += ' background: #fecaca; color: #dc2626; border: 1px solid #fca5a5;';
+                                        }
+                                    } else {
+                                        // Borç yok
+                                        cellContent = '-';
+                                        cellStyle += ' background: #f9fafb; color: #9ca3af; border: 1px solid #f3f4f6;';
+                                    }
+                                    
+                                    return `<td style="${cellStyle}">${cellContent}</td>`;
+                                }).join('');
+                                
+                                // Ekipman sütunu
+                                let equipmentCell = '';
+                                let equipmentCellStyle = 'padding: 6px; text-align: center; border-bottom: 1px solid #f3f4f6; font-size: 11px; font-weight: 600; transition: all 0.2s;';
+                                
+                                if (studentData.equipmentPayments.length > 0) {
+                                    let equipmentTotal = 0;
+                                    let equipmentPaid = 0;
+                                    
+                                    studentData.equipmentPayments.forEach(payment => {
+                                        const amount = payment.amount || 0;
+                                        equipmentTotal += amount;
+                                        if (payment.is_paid) {
+                                            equipmentPaid += amount;
+                                        }
+                                    });
+                                    
+                                    if (equipmentPaid === equipmentTotal && equipmentPaid > 0) {
+                                        equipmentCell = `${equipmentPaid}`;
+                                        equipmentCellStyle += ' background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;';
+                                    } else if (equipmentPaid > 0) {
+                                        equipmentCell = `${equipmentPaid}/${equipmentTotal}`;
+                                        equipmentCellStyle += ' background: #fef3c7; color: #92400e; border: 1px solid #fde68a;';
+                                    } else {
+                                        equipmentCell = `${equipmentTotal}`;
+                                        equipmentCellStyle += ' background: #fecaca; color: #dc2626; border: 1px solid #fca5a5;';
+                                    }
+                                } else {
+                                    equipmentCell = '-';
+                                    equipmentCellStyle += ' background: #f9fafb; color: #9ca3af; border: 1px solid #f3f4f6;';
+                                }
+                                
+                                return `
+                                    <tr style="border-bottom: 1px solid #f3f4f6; transition: all 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                                        <td style="padding: 10px; font-weight: 600; color: #374151; border-bottom: 1px solid #f3f4f6; font-size: 12px; position: sticky; left: 0; background: white; z-index: 5; border-right: 1px solid #e5e7eb;">
+                                            ${studentName}
+                                        </td>
+                                        ${monthCells}
+                                        <td style="${equipmentCellStyle}">${equipmentCell}</td>
+                                        <td style="padding: 10px; text-align: center; font-weight: 700; color: #1f2937; border-bottom: 1px solid #f3f4f6; background: #f8fafc; font-size: 13px; border: 1px solid #e5e7eb;">
+                                            ${studentData.totalPaid}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                        
+                        <!-- Toplam Satırı -->
+                        <tfoot>
+                            <tr style="background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); font-weight: 700;">
+                                <td style="padding: 12px; color: #374151; border-top: 2px solid #e5e7eb; font-size: 13px; font-weight: 700; position: sticky; left: 0; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); z-index: 10; border-right: 1px solid #cbd5e1;">
+                                    📊 TOPLAM
+                                </td>
+                                ${monthlyTotals.map(total => `
+                                    <td style="padding: 8px; text-align: center; color: #1f2937; border-top: 2px solid #e5e7eb; font-size: 11px; font-weight: 600;">
+                                        ${total}
+                                    </td>
+                                `).join('')}
+                                <td style="padding: 8px; text-align: center; color: #1f2937; border-top: 2px solid #e5e7eb; font-size: 11px; font-weight: 600;">
+                                    ${equipmentTotal}
+                                </td>
+                                <td style="padding: 12px; text-align: center; color: #dc2626; font-size: 15px; border-top: 2px solid #e5e7eb; font-weight: 700; background: #fef2f2; border: 1px solid #fecaca;">
+                                    ${grandTotal}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                
+                <!-- Renk Açıklaması -->
+                <div style="margin-top: 20px; display: flex; gap: 25px; justify-content: center; flex-wrap: wrap; padding: 15px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 20px; height: 20px; background: #dcfce7; border-radius: 6px; border: 1px solid #bbf7d0;"></div>
+                        <span style="font-size: 14px; color: #374151; font-weight: 500;">✅ Ödendi</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 20px; height: 20px; background: #fecaca; border-radius: 6px; border: 1px solid #fca5a5;"></div>
+                        <span style="font-size: 14px; color: #374151; font-weight: 500;">❌ Ödenmedi</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 20px; height: 20px; background: #fef3c7; border-radius: 6px; border: 1px solid #fde68a;"></div>
+                        <span style="font-size: 14px; color: #374151; font-weight: 500;">⚠️ Kısmi Ödeme</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 20px; height: 20px; background: #f9fafb; border-radius: 6px; border: 1px solid #f3f4f6;"></div>
+                        <span style="font-size: 14px; color: #374151; font-weight: 500;">➖ Borç Yok</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    async changeTrackingYear(direction) {
+        // Yıl değiştirme fonksiyonu
+        this.trackingYear = (this.trackingYear || new Date().getFullYear()) + direction;
+        
+        // Yıl sınırları (2020-2030)
+        if (this.trackingYear < 2020) this.trackingYear = 2020;
+        if (this.trackingYear > 2030) this.trackingYear = 2030;
+        
+        // Sadece tracking tablosunu yeniden render et
+        const paymentsList = document.getElementById('paymentsList');
+        if (paymentsList) {
+            try {
+                // Mevcut verileri al
+                const studentsResult = await supabaseService.getStudents();
+                const paymentsResult = await supabaseService.getPayments();
+                
+                if (studentsResult.success && paymentsResult.success) {
+                    const students = studentsResult.data || [];
+                    const payments = paymentsResult.data || [];
+                    
+                    // Sadece tracking tablosunu güncelle
+                    paymentsList.innerHTML = this.generatePaymentTrackingTable(students, payments);
+                }
+            } catch (error) {
+                console.error('❌ Yıl değiştirme hatası:', error);
+            }
+        }
     }
     
      validateTCKimlikNo(tcno) {
