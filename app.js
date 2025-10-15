@@ -276,7 +276,7 @@ class SportsManagementApp {
                 <div class="modal-content" style="width: min(800px, 92vw); max-height: 80vh; overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,.15);">
                     <div class="modal-header" style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #e5e7eb; background:#DC2626; color:#fff; border-radius:12px 12px 0 0;">
                         <h3 style="margin:0; font-size:18px; font-weight:700;">Tüm Aktiviteler</h3>
-                        <button id="closeActivitiesModal" style="background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">&times;</button>
+                        <button id="closeActivitiesModal" title="Aktiviteler penceresini kapat" aria-label="Kapat" style="background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">&times;</button>
                     </div>
                     <div style="padding: 8px 0;">
                         ${listHtml}
@@ -608,16 +608,16 @@ class SportsManagementApp {
             <div style="background: white; border-radius: 12px; width: 100%; max-width: 420px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); overflow: hidden;">
                 <div style="background: linear-gradient(135deg, #DC2626, #B91C1C); padding: 14px 18px; color: white; display: flex; align-items: center; justify-content: space-between;">
                     <h3 style="margin: 0; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px;"><i class="fas fa-boxes"></i> Stok Ekle ${equipmentName ? '• ' + equipmentName : ''}</h3>
-                    <button onclick="app.hideAddStockModal()" style="background: transparent; border: none; color: white; font-size: 22px; cursor: pointer;">×</button>
+                    <button onclick="app.hideAddStockModal()" title="Stok ekleme penceresini kapat" aria-label="Kapat" style="background: transparent; border: none; color: white; font-size: 22px; cursor: pointer;">×</button>
                 </div>
                 <form id="addStockForm" style="padding: 18px;">
                     <div style="margin-bottom: 12px;">
-                        <label style="display:block; font-weight:600; color:#374151; margin-bottom:6px;"><i class="fas fa-sort-numeric-up"></i> Beden / Numara</label>
-                        <input type="text" name="size" placeholder="Örn: S, M, 42" required style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <label for="stockSize" style="display:block; font-weight:600; color:#374151; margin-bottom:6px;"><i class="fas fa-sort-numeric-up"></i> Beden / Numara</label>
+                        <input type="text" id="stockSize" name="size" placeholder="Örn: S, M, 42" required style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
                     </div>
                     <div style="margin-bottom: 4px;">
-                        <label style="display:block; font-weight:600; color:#374151; margin-bottom:6px;"><i class="fas fa-hashtag"></i> Miktar</label>
-                        <input type="number" name="quantity" min="1" step="1" placeholder="Adet" required style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                        <label for="stockQuantity" style="display:block; font-weight:600; color:#374151; margin-bottom:6px;"><i class="fas fa-hashtag"></i> Miktar</label>
+                        <input type="number" id="stockQuantity" name="quantity" min="1" step="1" placeholder="Adet" required style="width: 100%; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px;">
                     </div>
                     <div style="display:flex; gap:10px; justify-content:flex-end; margin-top: 16px;">
                         <button type="button" onclick="app.hideAddStockModal()" style="background: #6B7280; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">İptal</button>
@@ -2684,16 +2684,25 @@ if (studentId) {
             }
             let input = document.getElementById('studentSearchInput');
             if (!input) {
+                // GÜVENLİK: Accessibility için label ekle
+                const label = document.createElement('label');
+                label.htmlFor = 'studentSearchInput';
+                label.textContent = 'Öğrenci Arama';
+                label.style.cssText = 'position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;'; // Screen reader için gizli label
+                
                 input = document.createElement('input');
                 input.id = 'studentSearchInput';
                 input.type = 'search';
                 input.placeholder = 'Ara: ad, soyad, branş...';
+                input.setAttribute('aria-label', 'Öğrenci arama'); // Accessibility için
                 // Match payments: icon on the left, 36px left padding, 10px vertical padding, radius 10
                 input.style.cssText = 'max-width:360px; width:100%; padding:10px 12px 10px 36px; border:1px solid #e5e7eb; border-radius:10px; background: white; font-size: 14px; color: #111827;';
                 // Add search icon like payments
                 const icon = document.createElement('i');
                 icon.className = 'fas fa-search';
                 icon.style.cssText = 'position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF;';
+                
+                rightBar.appendChild(label);
                 rightBar.appendChild(icon);
                 rightBar.appendChild(input);
                 const mq = window.matchMedia('(max-width: 640px)');
@@ -3165,7 +3174,7 @@ if (studentId) {
             modalContent.innerHTML = `
                 <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #e5e7eb; background: #DC2626; color: white;">
                     <h2 style="margin: 0; color: white;">Öğrenci Detayları</h2>
-                    <button onclick="app.hideStudentDetailModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: white;">×</button>
+                    <button onclick="app.hideStudentDetailModal()" title="Öğrenci detayları penceresini kapat" aria-label="Kapat" style="background: none; border: none; font-size: 24px; cursor: pointer; color: white;">×</button>
                 </div>
                 <div class="modal-body" style="padding: 20px; max-height: 70vh; overflow-y: auto;">
                     <div style="display: flex; gap: 20px; margin-bottom: 20px;">
@@ -3452,8 +3461,9 @@ if (studentId) {
                         <button class="payment-tab-btn" data-tab="tracking">📊 Ödeme Takip</button>
                     </div>
                     <div class="payments-search" style="position: relative; max-width: 360px; width: 100%; min-width: 220px;">
+                        <label for="paymentsSearchInput" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">Ödeme Arama</label>
                         <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF;"></i>
-                        <input id="paymentsSearchInput" type="text" placeholder="Ara: öğrenci, branş, dönem..." style="width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; font-size: 14px; color: #111827;">
+                        <input id="paymentsSearchInput" type="text" placeholder="Ara: öğrenci, branş, dönem..." aria-label="Ödeme arama" style="width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; font-size: 14px; color: #111827;">
                     </div>
                 </div>
 
@@ -4057,8 +4067,9 @@ if (monthlyFee == null) monthlyFee = 500;
                         </div>
                     </div>
                     <div class="equipment-search" style="position: relative; max-width: 360px; width: 100%; min-width: 220px;">
+                        <label for="equipmentGlobalSearchInput" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">Ekipman Arama</label>
                         <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF;"></i>
-                        <input id="equipmentGlobalSearchInput" type="text" placeholder="Ara: öğrenci, ekipman, beden..." style="width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; font-size: 14px; color: #111827;">
+                        <input id="equipmentGlobalSearchInput" type="text" placeholder="Ara: öğrenci, ekipman, beden..." aria-label="Ekipman arama" style="width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; font-size: 14px; color: #111827;">
                     </div>
                 </div>
             </div>
@@ -4101,7 +4112,12 @@ if (monthlyFee == null) monthlyFee = 500;
                             bar.className = 'equipment-search';
                             bar.style.cssText = 'position: relative; max-width: 360px; width: 100%; min-width: 220px;';
                             
-                            // GÜVENLİK: innerHTML yerine güvenli DOM oluşturma
+                            // GÜVENLİK: innerHTML yerine güvenli DOM oluşturma + Accessibility
+                            const searchLabel = this.createSafeElement('label', {
+                                for: 'equipmentGlobalSearchInput',
+                                style: 'position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;'
+                            }, [document.createTextNode('Ekipman Arama')]);
+                            
                             const searchIcon = this.createSafeElement('i', {
                                 class: 'fas fa-search',
                                 style: 'position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF;'
@@ -4110,8 +4126,10 @@ if (monthlyFee == null) monthlyFee = 500;
                                 id: 'equipmentGlobalSearchInput',
                                 type: 'text',
                                 placeholder: 'Ara: öğrenci, ekipman, beden...',
+                                'aria-label': 'Ekipman arama',
                                 style: 'width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; font-size: 14px; color: #111827;'
                             });
+                            bar.appendChild(searchLabel);
                             bar.appendChild(searchIcon);
                             bar.appendChild(searchInput);
                             
@@ -4131,7 +4149,12 @@ if (monthlyFee == null) monthlyFee = 500;
                             bar.className = 'equipment-search';
                             bar.style.cssText = 'position: relative; max-width: 360px; width: 100%; min-width: 220px; margin: 8px 0;';
                             
-                            // GÜVENLİK: innerHTML yerine güvenli DOM oluşturma
+                            // GÜVENLİK: innerHTML yerine güvenli DOM oluşturma + Accessibility
+                            const searchLabel = this.createSafeElement('label', {
+                                for: 'equipmentGlobalSearchInput',
+                                style: 'position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;'
+                            }, [document.createTextNode('Ekipman Arama')]);
+                            
                             const searchIcon = this.createSafeElement('i', {
                                 class: 'fas fa-search',
                                 style: 'position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9CA3AF;'
@@ -4140,8 +4163,10 @@ if (monthlyFee == null) monthlyFee = 500;
                                 id: 'equipmentGlobalSearchInput',
                                 type: 'text',
                                 placeholder: 'Ara: öğrenci, ekipman, beden...',
+                                'aria-label': 'Ekipman arama',
                                 style: 'width: 100%; padding: 10px 12px 10px 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: white; font-size: 14px; color: #111827;'
                             });
+                            bar.appendChild(searchLabel);
                             bar.appendChild(searchIcon);
                             bar.appendChild(searchInput);
                             
@@ -4385,48 +4410,48 @@ async selectStudentForEquipment(studentId) {
                 
                 <form id="equipmentAssignmentFormData" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: end;">
                     <div>
-                        <label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
+                        <label for="equipmentName" style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
                             <i class="fas fa-tshirt" style="margin-right: 6px;"></i>Ekipman
                         </label>
-                        <select name="equipmentName" required onchange="app.onEquipmentChange(this.value)" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                        <select id="equipmentName" name="equipmentName" required onchange="app.onEquipmentChange(this.value)" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
                             <option value="">Ekipman seçiniz...</option>
                             ${Array.from(new Set((equipmentTypes || []).map(et => et.name || 'Ekipman')))
                                 .map(name => `<option value="${name}">${name}</option>`).join('')}
                         </select>
                         <!-- Hidden fields kept for backend compatibility -->
-                        <input type="hidden" name="equipmentType" value="">
-                        <input type="hidden" name="size" value="">
+                        <input type="hidden" name="equipmentType" value="" aria-hidden="true">
+                        <input type="hidden" name="size" value="" aria-hidden="true">
                     </div>
                     <div>
-                        <label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
+                        <label for="sizeSelect" style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
                             <i class="fas fa-ruler" style="margin-right: 6px;"></i>Beden
                         </label>
-                        <select name="sizeSelect" required onchange="app.onSizeChange(this.value)" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                        <select id="sizeSelect" name="sizeSelect" required onchange="app.onSizeChange(this.value)" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
                             <option value="">Önce ekipman seçiniz...</option>
                         </select>
                     </div>
                     
                     <div>
-                        <label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
+                        <label for="quantitySelect" style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
                             <i class="fas fa-sort-numeric-up" style="margin-right: 6px;"></i>Adet
                         </label>
-                        <select name="quantity" required style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        <select id="quantitySelect" name="quantity" required style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                             <option value="">Önce ekipman ve beden seçiniz...</option>
                         </select>
                     </div>
                     
                     <div>
-                        <label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
+                        <label for="assignmentDate" style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
                             <i class="fas fa-calendar-alt" style="margin-right: 6px;"></i>Atama Tarihi
                         </label>
-                        <input type="date" name="assignmentDate" required value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                        <input type="date" id="assignmentDate" name="assignmentDate" required value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                     </div>
                     
                     <div style="grid-column: 1 / -1;">
-                        <label style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
+                        <label for="equipmentNotes" style="display: block; margin-bottom: 6px; font-weight: 600; color: #374151;">
                             <i class="fas fa-sticky-note" style="margin-right: 6px;"></i>Notlar (İsteğe Bağlı)
                         </label>
-                        <textarea name="notes" rows="3" placeholder="Ekipman hakkında notlar..." style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; resize: vertical;"></textarea>
+                        <textarea id="equipmentNotes" name="notes" rows="3" placeholder="Ekipman hakkında notlar..." style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; resize: vertical;"></textarea>
                     </div>
                     
                     <div style="grid-column: 1 / -1; text-align: center; margin-top: 15px;">
@@ -6735,6 +6760,8 @@ if (student.sport && sportBranches.length > 0) {
             // Kapatma butonu ekle
             const closeBtn = document.createElement('button');
             closeBtn.innerHTML = '✕ Kapat';
+            closeBtn.title = 'Yazdırma önizlemesini kapat'; // Accessibility
+            closeBtn.setAttribute('aria-label', 'Yazdırma önizlemesini kapat');
             closeBtn.style.position = 'fixed';
             closeBtn.style.top = '10px';
             closeBtn.style.right = '10px';
@@ -6750,6 +6777,8 @@ if (student.sport && sportBranches.length > 0) {
             // Print butonu ekle
             const printBtn = document.createElement('button');
             printBtn.innerHTML = '🖨️ Yazdır';
+            printBtn.title = 'Sayfayı yazdır'; // Accessibility
+            printBtn.setAttribute('aria-label', 'Sayfayı yazdır');
             printBtn.style.position = 'fixed';
             printBtn.style.top = '10px';
             printBtn.style.right = '80px';
