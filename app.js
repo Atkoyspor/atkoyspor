@@ -11,19 +11,20 @@ class SportsManagementApp {
         this.currentDate = new Date();
         this.currentChartType = 'pie'; // Track current chart type
         this.trackingYear = new Date().getFullYear(); // Ödeme takip yılı
-        this.initializeApp();this.currentChartType = 'pie';
+        this.initializeApp();
         this.sportColorMap = {}; // YENİ: Spor renk haritasını burada saklayacağız
         this._equipSearchDebounce = null; // debounce timer for equipment student search
-    this._studentSearchDebounce = null; // debounce timer for students search
-    this._studentSearchQuery = '';
-    this._equipmentGlobalSearchDebounce = null;
-    this._equipmentGlobalSearchQuery = '';
+        this._studentSearchDebounce = null; // debounce timer for students search
+        this._studentSearchQuery = '';
+        this._equipmentGlobalSearchDebounce = null;
+        this._equipmentGlobalSearchQuery = '';
         this._singleClickTimer = null; // timer to distinguish single vs double click on trainings
         this._lastClickedTrainingId = null;
         
         // PERFORMANS: Cache sistemi
         this._cache = new Map();
         this._cacheTimeout = 5 * 60 * 1000; // 5 dakika cache
+        this._sportTextCache = new Map(); // getSportText için cache
     }
 
     // ===== GÜVENLİK FONKSİYONLARI =====
@@ -37,14 +38,54 @@ class SportsManagementApp {
         return div.innerHTML;
     }
     
-    // Güvenli DOM element oluşturma
-    createSafeElement(tagName, textContent = '', attributes = {}) {
-        const element = document.createElement(tagName);
+    // Utility function to safely convert sport value to string
+    getSportText(sportValue) {
+        if (!sportValue) return 'Belirtilmemiş';
         
-        // Text content'i güvenli şekilde set et
-        if (textContent) {
-            element.textContent = textContent;
+        // PERFORMANS: Cache kontrolü - aynı değerler için tekrar işlem yapma
+        const cacheKey = typeof sportValue === 'object' ? JSON.stringify(sportValue) : String(sportValue);
+        if (this._sportTextCache.has(cacheKey)) {
+            return this._sportTextCache.get(cacheKey);
         }
+        
+        let result;
+        
+        if (typeof sportValue === 'object' && sportValue !== null) {
+            // GÜVENLİK: Obje ise, içindeki değerleri güvenli şekilde kontrol et
+            const possibleValues = [
+                sportValue.name, 
+                sportValue.title, 
+                sportValue.value,
+                sportValue.label,
+                sportValue.text
+            ].filter(v => v && typeof v === 'string' && v.length <= 100); // Max length kontrolü
+            
+            if (possibleValues.length > 0) {
+                result = this.sanitizeHtml(possibleValues[0]); // XSS koruması
+            } else {
+                // Hiçbir string property bulunamazsa, ilk değeri al
+                const values = Object.values(sportValue)
+                    .filter(v => v && typeof v === 'string' && v.length <= 100);
+                result = values.length > 0 ? this.sanitizeHtml(values[0]) : 'Belirtilmemiş';
+            }
+        } else {
+            // GÜVENLİK: String değerleri de sanitize et
+            const stringValue = String(sportValue);
+            result = stringValue.length <= 100 ? this.sanitizeHtml(stringValue) : 'Belirtilmemiş';
+        }
+        
+        // PERFORMANS: Sonucu cache'le (max 1000 entry)
+        if (this._sportTextCache.size >= 1000) {
+            this._sportTextCache.clear(); // Memory leak önlemi
+        }
+        this._sportTextCache.set(cacheKey, result);
+        
+        return result;
+    }
+
+    // Utility function to create safe DOM elements
+    createSafeElement(tagName, attributes = {}, children = []) {
+        const element = document.createElement(tagName);
         
         // Attributes'ları güvenli şekilde set et
         for (const [key, value] of Object.entries(attributes)) {
@@ -52,6 +93,11 @@ class SportsManagementApp {
                 element.setAttribute(key, this.sanitizeHtml(value));
             }
         }
+        
+        // Children'ları ekle
+        children.forEach(child => {
+            if (child) element.appendChild(child);
+        });
         
         return element;
     }
@@ -98,19 +144,24 @@ class SportsManagementApp {
     }
     
     clearCache(pattern = null) {
-        if (!pattern) {
-            this._cache.clear();
-            return;
-        }
-        
-        // Pattern'e uyan cache'leri temizle
-        for (const key of this._cache.keys()) {
-            if (key.includes(pattern)) {
-                this._cache.delete(key);
+        if (pattern) {
+            // Pattern'e göre cache temizle
+            for (const key of this._cache.keys()) {
+                if (key.includes(pattern)) {
+                    this._cache.delete(key);
+                }
             }
+            // Sport text cache'ini de temizle (öğrenci verileri değiştiğinde)
+            if (pattern.includes('student')) {
+                this._sportTextCache.clear();
+            }
+        } else {
+            // Tüm cache'i temizle
+            this._cache.clear();
+            this._sportTextCache.clear();
         }
     }
-    
+
     // Debounced function helper
     debounce(func, wait) {
         let timeout;
@@ -1123,9 +1174,11 @@ class SportsManagementApp {
                             <label><i class="fas fa-running"></i> Spor Branşı *</label>
                            <select name="sport" required style="padding: 8px;">
     <option value="">Seçiniz...</option>
-    ${sportBranches.map(branch => 
-        `<option value="${branch.name}" ${(student.sport || student.branch) === branch.name ? 'selected' : ''}>${branch.name}</option>`
-    ).join('')}
+    ${sportBranches.map(branch => {
+        // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+        const studentSportText = this.getSportText(student.sport);
+        return `<option value="${branch.name}" ${studentSportText === branch.name ? 'selected' : ''}>${branch.name}</option>`;
+    }).join('')}
 </select>
                         </div>
                         <div class="input-group">
@@ -2355,7 +2408,8 @@ if (studentId) {
     
             // Öğrencileri spor branşına göre say
             students.forEach(student => {
-                const branchName = student.sport || student.branch || 'Branş Atanmamış';
+                // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+                const branchName = this.getSportText(student.sport) || 'Branş Atanmamış';
                 distribution[branchName] = (distribution[branchName] || 0) + 1;
             });
     
@@ -2456,7 +2510,7 @@ if (studentId) {
 
     async loadStudentsScreen() {
         try {
-            // PERFORMANS: Cache'den önce kontrol et
+            // PERFORMANS: Cache'den önce kontrol et (sadece gerektiğinde temizle)
             const cacheKey = 'students_list';
             let cachedStudents = this.getCachedData(cacheKey);
             
@@ -2529,7 +2583,12 @@ if (studentId) {
                 
                 sportBranches.forEach(branch => {
                     const studentCount = this.students ? 
-                    this.students.filter(s => !s.is_deleted && (s.branch === branch.name || s.sport === branch.name)).length : 0;
+                    this.students.filter(s => {
+                        if (s.is_deleted) return false;
+                        // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+                        const sportText = this.getSportText(s.sport);
+                        return sportText === branch.name;
+                    }).length : 0;
                     
                         tabsHTML += `
                         <button class="tab-btn" data-sport="${branch.name}" style="
@@ -2746,12 +2805,18 @@ if (studentId) {
         let base = [];
         if (sport === 'all') base = this.students.filter(s => !s.is_deleted);
         else if (sport === 'deleted') base = this.students.filter(s => s.is_deleted);
-        else base = this.students.filter(s => !s.is_deleted && (s.branch === sport || s.sport === sport));
+        else base = this.students.filter(s => {
+            if (s.is_deleted) return false;
+            // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+            const sportText = this.getSportText(s.sport);
+            return sportText === sport;
+        });
         let filtered = base;
         if (q) {
             filtered = base.filter(s => {
                 const name = ((s.name || '') + ' ' + (s.surname || '')).toLowerCase();
-                const sportName = (s.sport || s.branch || '').toLowerCase();
+                // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+                const sportName = this.getSportText(s.sport).toLowerCase();
                 const phone = (s.phone || '').toLowerCase();
                 const tc = (s.tcno || s.tc_no || '').toString().toLowerCase();
                 return name.includes(q) || sportName.includes(q) || phone.includes(q) || tc.includes(q);
@@ -2803,6 +2868,8 @@ if (studentId) {
             console.error('Students container not found');
             return;
         }
+
+
 
         if (!students || students.length === 0) {
             container.innerHTML = `
@@ -2909,7 +2976,8 @@ if (studentId) {
             
             const sportDiv = document.createElement('div');
             sportDiv.style.cssText = 'color: #6b7280; font-size: 14px; margin-bottom: 4px;';
-            sportDiv.textContent = student.sport || student.branch || '-';
+            // GÜVENLİK: Obje olabilecek değerleri string'e çevir
+            sportDiv.textContent = this.getSportText(student.sport);
             
             const statusSpan = document.createElement('span');
             statusSpan.style.cssText = `
@@ -3062,10 +3130,12 @@ if (studentId) {
         const detailsDiv = document.createElement('div');
         detailsDiv.style.cssText = 'color: #6b7280; font-size: 14px; display: flex; flex-wrap: wrap; gap: 12px;';
         
-        // GÜVENLİK: innerHTML yerine güvenli DOM oluşturma
+        // GÜVENLİK: innerHTML yerine güvenli DOM oluşturma + Obje kontrolü
+        const sportText = this.getSportText(student.sport);
+            
         const sportSpan = this.createSafeElement('span', {}, [
             this.createSafeElement('i', { class: 'fas fa-running', style: 'margin-right: 4px;' }),
-            document.createTextNode(this.sanitizeHtml(student.sport || 'Belirtilmemiş'))
+            document.createTextNode(sportText) // textContent zaten güvenli, sanitize gereksiz
         ]);
         
         const ageSpan = this.createSafeElement('span', {}, [
@@ -3166,7 +3236,9 @@ if (studentId) {
         const tcSafe = this.escapeHtml(student.tc_no || student.tcno || 'Belirtilmemiş');
         const phoneSafe = this.escapeHtml(student.phone || 'Belirtilmemiş');
         const schoolSafe = this.escapeHtml(student.school || 'Belirtilmemiş');
-        const branchSafe = this.escapeHtml(student.sport || student.branch || 'Belirtilmemiş');
+            // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+            const sportText = this.getSportText(student.sport);
+        const branchSafe = this.escapeHtml(sportText);
         
         // Populate modal with student data
         const modalContent = modal.querySelector('.modal-content');
@@ -3588,7 +3660,8 @@ if (studentId) {
             filteredPayments = filteredPayments.filter(p => {
                 const student = studentMap[p.student_id] || {};
                 const name = `${student.name || ''} ${student.surname || ''}`.toLowerCase();
-                const sport = (student.sport || student.branch || '').toLowerCase();
+                // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+                const sport = this.getSportText(student.sport).toLowerCase();
                 const period = (p.payment_period || p.period || '').toString().toLowerCase();
                 const amount = (p.amount != null ? String(p.amount) : '').toLowerCase();
                 return name.includes(q) || sport.includes(q) || period.includes(q) || amount.includes(q);
@@ -3626,7 +3699,11 @@ if (studentId) {
             }
             
            
-            const studentSport = student ? (student.sport || student.branch || 'Futbol') : 'Futbol';
+            // GÜVENLİK: Obje olabilecek sport değerini kontrol et
+            let studentSport = 'Futbol';
+            if (student) {
+                studentSport = this.getSportText(student.sport) || 'Futbol';
+            }
             const studentPhoto = student?.photo_thumb_url || student?.photo_url || 'https://via.placeholder.com/50x50?text=?';
 
 // Tutarı gösterme mantığı:
@@ -4302,7 +4379,7 @@ async loadEquipmentAssignmentTab() {
                                         <div class="student-details" style="display: flex; align-items: center; gap: 16px; font-size: 13px; color: #6B7280;">
                                             <span style="display: inline-flex; align-items: center; background: #f3f4f6; padding: 4px 8px; border-radius: 6px; white-space: nowrap;">
                                                 <i class="fas fa-running" style="margin-right: 6px; color: #DC2626;"></i>
-                                                ${student.sport || student.branch || 'Spor branşı yok'}
+                                                ${this.getSportText(student.sport) || 'Spor branşı yok'}
                                             </span>
                                             <span style="display: inline-flex; align-items: center; background: #f3f4f6; padding: 4px 8px; border-radius: 6px; white-space: nowrap;">
                                                 <i class="fas fa-phone" style="margin-right: 6px; color: #10B981;"></i>
@@ -4391,7 +4468,7 @@ async selectStudentForEquipment(studentId) {
                         </div>
                         <div style="font-size: 14px; color: #6B7280;">
                             <i class="fas fa-running" style="margin-right: 6px;"></i>
-                            Branş: ${student.sport || student.branch || 'Belirtilmemiş'}
+                            Branş: ${this.getSportText(student.sport) || 'Belirtilmemiş'}
                         </div>
                     </div>
                     <button onclick="app.clearSelectedStudent()" 
@@ -5753,7 +5830,7 @@ if (assignment.equipment_photo_url && assignment.equipment_photo_url.trim() !== 
             // Filter students by sport and age group
             const relevantStudents = allStudents.filter(student => 
                 !student.is_deleted && 
-                (student.sport === training.sport || student.branch === training.sport)
+                this.getSportText(student.sport) === training.sport
             );
 
             // Show modal
@@ -5831,7 +5908,7 @@ if (assignment.equipment_photo_url && assignment.equipment_photo_url.trim() !== 
                                     ${student.name} ${student.surname}
                                 </div>
                                 <div style="font-size: 12px; color: #6B7280;">
-                                    ${student.sport || student.branch} - Yaş grubu belirtilmemiş
+                                    ${this.getSportText(student.sport) || 'Belirtilmemiş'} - Yaş grubu belirtilmemiş
                                 </div>
                             </div>
                         </div>
