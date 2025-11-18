@@ -1,0 +1,4 @@
+# Supabase configuration
+# Disable JWT verification for the scheduled/cron-invoked function
+[functions.generate-monthly-fees]
+verify_jwt = false

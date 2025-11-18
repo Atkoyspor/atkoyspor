@@ -1,0 +1,35 @@
+name: Generate Monthly Fees
+
+on:
+  schedule:
+    # Runs at 03:00 on the 1st of every month (UTC). Adjust as needed.
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+
+jobs:
+  run-fee-generation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Edge Function
+        env:
+          FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+          FEE_SECRET: ${{ secrets.FEE_TRIGGER_SECRET }}
+        run: |
+          if [ -z "$FUNCTION_URL" ]; then
+            echo "Missing SUPABASE_FUNCTION_URL secret";
+            exit 1;
+          fi
+          if [ -z "$FEE_SECRET" ]; then
+            echo "Missing FEE_TRIGGER_SECRET secret";
+            exit 1;
+          fi
+          # Use curl to POST to the function (manual trigger path)
+          HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" -X POST "$FUNCTION_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-FEE-SECRET: $FEE_SECRET" \
+            --data '{}')
+          echo "HTTP_CODE=$HTTP_CODE"
+          echo "Response:" && cat response.json
+          if [ "$HTTP_CODE" -ge 300 ]; then
+            exit 1
+          fi
