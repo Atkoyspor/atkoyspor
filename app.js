@@ -27,6 +27,142 @@ class SportsManagementApp {
         this._sportTextCache = new Map(); // getSportText için cache
     }
 
+    // Ayın ilk günü otomatik aidat tetikleyici (istemci tarafı, login sonrası)
+    async maybeAutoGenerateMonthlyFees() {
+        try {
+            const now = new Date();
+            if (now.getDate() !== 1) return; // Sadece ayın ilk günü
+
+            const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const lsKey = `fees_generated_${period}`;
+            if (localStorage.getItem(lsKey) === '1') return; // Bu ay zaten tetiklenmiş
+
+            // Basit yetki kontrolü ve kullanıcı onayı
+            const userInfo = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            const isAdminLike = (userInfo.role && String(userInfo.role).toLowerCase() === 'admin') ||
+                                (userInfo.email && /admin|atkoy|yonetici/i.test(userInfo.email));
+            const proceed = confirm(`Bugün ayın ilk günü. ${period} için aktif üyelere aidat yansıtılsın mı?` + (isAdminLike ? '' : '\n(Not: Yönetici doğrulanamadı.)'));
+            if (!proceed) return;
+
+            await this.generateMonthlyFeesOnce();
+            // Başarılı kabul edip aynı ay içinde tekrar sormamak için işaretle
+            localStorage.setItem(lsKey, '1');
+        } catch (e) {
+            console.error('maybeAutoGenerateMonthlyFees error:', e);
+        }
+    }
+
+    // ============ MANUAL MONTHLY FEE GENERATION ============
+    // Creates current month's unpaid payment records for all ACTIVE students.
+    // Prevents duplicates by checking payments.payment_period (YYYY-MM) per student.
+    async generateMonthlyFeesOnce() {
+        try {
+            // Auth check (simple): require logged-in user
+            if (!this.currentUser) {
+                alert('Lütfen önce giriş yapınız.');
+                return;
+            }
+
+            // Optional: basic admin check (email or role)
+            const userInfo = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            const isAdminLike = (userInfo.role && String(userInfo.role).toLowerCase() === 'admin') ||
+                                (userInfo.email && /admin|atkoy|yonetici/i.test(userInfo.email));
+            if (!isAdminLike) {
+                const proceed = confirm('Yönetici yetkisi doğrulanamadı. Yine de devam edilsin mi?');
+                if (!proceed) return;
+            }
+
+            // Compute current period
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1; // 1-12
+            const period = `${year}-${String(month).padStart(2, '0')}`;
+
+            // Load active students (minimal columns)
+            const { data: students, error: stuErr } = await supabase
+                .from('students')
+                .select('id, status, sport_branch_id, sport, discount_rate, first_name, last_name, name, surname')
+                .eq('status', 'active');
+            if (stuErr) throw stuErr;
+
+            if (!students || students.length === 0) {
+                alert('Aktif öğrenci bulunamadı.');
+                return;
+            }
+
+            // Load sport branches to determine fees
+            const branchesRes = await supabaseService.getSportBranches();
+            const branchList = branchesRes.success ? (branchesRes.data || []) : [];
+            const branchMap = {};
+            branchList.forEach(b => { if (b && b.id) branchMap[b.id] = b; });
+
+            let toCreate = [];
+            let skipped = 0;
+
+            // For each student, skip if already has a payment for this period
+            for (const s of students) {
+                try {
+                    const { data: existing, error: exErr } = await supabase
+                        .from('payments')
+                        .select('id')
+                        .eq('student_id', s.id)
+                        .eq('payment_period', period)
+                        .limit(1);
+                    if (exErr) throw exErr;
+                    if (existing && existing.length > 0) { skipped++; continue; }
+
+                    const br = branchMap[s.sport_branch_id] || {};
+                    const baseFee = (typeof br.monthly_fee === 'number') ? br.monthly_fee
+                                   : (typeof br.fee === 'number') ? br.fee : 500;
+                    const discount = (typeof s.discount_rate === 'number') ? s.discount_rate : 0;
+                    const amount = Number((baseFee * (1 - discount / 100)).toFixed(2));
+
+                    toCreate.push({
+                        student_id: s.id,
+                        amount: amount,
+                        payment_date: null,
+                        payment_method: null,
+                        period_month: month,
+                        period_year: year,
+                        payment_period: period,
+                        notes: `${(br && br.name) ? br.name : 'Spor'} branşı için aylık aidat - ${period}`,
+                        is_paid: false
+                    });
+                } catch (innerErr) {
+                    console.error('Öğrenci için aidat oluşturulamadı:', s?.id, innerErr);
+                }
+            }
+
+            if (toCreate.length === 0) {
+                alert(`Bu dönem için yeni aidat kaydı yok. (Atlanan: ${skipped})`);
+                return;
+            }
+
+            // Insert in batches to avoid payload issues
+            const batchSize = 500;
+            let inserted = 0;
+            for (let i = 0; i < toCreate.length; i += batchSize) {
+                const batch = toCreate.slice(i, i + batchSize);
+                const { error: insErr } = await supabase.from('payments').insert(batch);
+                if (insErr) throw insErr;
+                inserted += batch.length;
+            }
+
+            try {
+                await supabaseService.addActivityLog(
+                    'generate_monthly_fees', 'system', null,
+                    `Manuel: ${period} için ${inserted} aidat kaydı oluşturuldu (skip: ${skipped})`,
+                    userInfo
+                );
+            } catch (_) {}
+
+            alert(`Başarılı: ${period} için ${inserted} aidat kaydı oluşturuldu. (Atlanan: ${skipped})`);
+        } catch (error) {
+            console.error('Aylık aidat oluşturma hatası:', error);
+            alert('Aylık aidat oluşturulurken hata oluştu: ' + this.formatErrorMessage(error));
+        }
+    }
+
     // ===== GÜVENLİK FONKSİYONLARI =====
     
     // XSS koruması için HTML sanitization
@@ -730,6 +866,9 @@ class SportsManagementApp {
         this.setupEventListeners();
         this.checkRememberedUser();
         this.showScreen('loginScreen');
+        // Expose a safe global trigger for one-time monthly fee generation
+        // Usage from console: window.triggerMonthlyFees()
+        try { window.triggerMonthlyFees = () => this.generateMonthlyFeesOnce(); } catch (_) {}
     }
     async initializeSportColors() {
         // 1. Geniş ve modern bir renk paleti tanımla
@@ -809,6 +948,14 @@ class SportsManagementApp {
         document.querySelectorAll('[id^="logoutBtn"]').forEach(btn => {
             btn.addEventListener('click', () => this.handleLogout());
         });
+
+        // Optional admin button to trigger monthly fees if present in DOM
+        const triggerBtn = document.getElementById('triggerMonthlyFeesBtn');
+        if (triggerBtn) {
+            triggerBtn.addEventListener('click', async () => {
+                await this.generateMonthlyFeesOnce();
+            });
+        }
 
         // Add Student button
         const addStudentBtn = document.getElementById('addStudentBtn');
@@ -954,6 +1101,8 @@ class SportsManagementApp {
                 await this.initializeSportColors(); // YENİ: Renkleri burada hazırla
                 this.showScreen('dashboardScreen');
                 await this.loadDashboard();
+                // Ayın ilk günü otomatik aidat kontrolü (tek sefer/ay)
+                await this.maybeAutoGenerateMonthlyFees();
             } else {
                 alert('Giriş başarısız: ' + this.formatErrorMessage(result.error));
             }
