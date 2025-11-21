@@ -1,4 +1,11 @@
+<<<<<<< HEAD
 # Supabase configuration
 # Disable JWT verification for the scheduled/cron-invoked function
 [functions.generate-monthly-fees]
 verify_jwt = false
+=======
+# Supabase configuration
+# Disable JWT verification for the scheduled/cron-invoked function
+[functions.generate-monthly-fees]
+verify_jwt = false
+>>>>>>> ecd8f28074c2383e9e73d704d7b89ec7d410bbb2

@@ -27,6 +27,72 @@ class SportsManagementApp {
         this._sportTextCache = new Map(); // getSportText için cache
     }
 
+    // Update existing monthly fees by payment_period (do not use payment_date)
+    // Only updates UNPAID records for the current period for ACTIVE students
+    async updateMonthlyFeesForCurrentPeriod() {
+        try {
+            if (!this.currentUser) {
+                alert('Lütfen önce giriş yapınız.');
+                return;
+            }
+
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const period = `${year}-${String(month).padStart(2, '0')}`;
+
+            // Load branches and build name map
+            const branchesRes = await supabaseService.getSportBranches();
+            const branchList = branchesRes.success ? (branchesRes.data || []) : [];
+            const branchByName = {};
+            branchList.forEach(b => { if (b && b.name) branchByName[(b.name || '').toString().toLowerCase()] = b; });
+
+            // Active students
+            const { data: students, error: stuErr } = await supabase
+                .from('students')
+                .select('id, status, sport, discount_rate, name, surname, full_name, is_deleted, deleted_at')
+                .in('status', ['active', 'Active', 'ACTIVE'])
+                .or('is_deleted.is.false,deleted_at.is.null');
+            if (stuErr) throw stuErr;
+
+            let updated = 0;
+            let skippedPaid = 0;
+            let missing = 0;
+
+            for (const s of (students || [])) {
+                // Find existing record by student_id + payment_period
+                const { data: pay, error: findErr } = await supabase
+                    .from('payments')
+                    .select('id, is_paid')
+                    .eq('student_id', s.id)
+                    .eq('payment_period', period)
+                    .maybeSingle();
+                if (findErr) continue;
+                if (!pay) { missing++; continue; }
+                if (pay.is_paid) { skippedPaid++; continue; }
+
+                const sportNameRaw = this.getSportText ? this.getSportText(s.sport) : (s.sport || '');
+                const sportName = (sportNameRaw || '').toString().trim();
+                const br = branchByName[(sportName || '').toLowerCase()] || {};
+                const baseFee = (typeof br.monthly_fee === 'number') ? br.monthly_fee
+                               : (typeof br.fee === 'number') ? br.fee : 1000;
+                const discount = (typeof s.discount_rate === 'number') ? s.discount_rate : 0;
+                const amount = Number((baseFee * (1 - discount / 100)).toFixed(2));
+
+                const { error: updErr } = await supabase
+                    .from('payments')
+                    .update({ amount, notes: `${sportName || 'Spor'} branşı için aylık aidat - ${period}` })
+                    .eq('id', pay.id);
+                if (!updErr) updated++;
+            }
+
+            alert(`Güncelleme tamamlandı. Güncellenen: ${updated}, Ödenmiş (dokunulmadı): ${skippedPaid}, Kayıt bulunamadı: ${missing}`);
+        } catch (e) {
+            console.error('updateMonthlyFeesForCurrentPeriod error:', e);
+            alert('Aidat güncellenemedi: ' + this.formatErrorMessage(e));
+        }
+    }
+
     // Ayın ilk günü otomatik aidat tetikleyici (istemci tarafı, login sonrası)
     async maybeAutoGenerateMonthlyFees() {
         try {
@@ -78,11 +144,13 @@ class SportsManagementApp {
             const month = now.getMonth() + 1; // 1-12
             const period = `${year}-${String(month).padStart(2, '0')}`;
 
-            // Load active students (minimal columns)
+            // Load active students (minimal columns) - aligned with schema
+            // Be tolerant: include common case variants of 'active' and exclude deleted
             const { data: students, error: stuErr } = await supabase
                 .from('students')
-                .select('id, status, sport_branch_id, sport, discount_rate, first_name, last_name, name, surname')
-                .eq('status', 'active');
+                .select('id, status, sport, discount_rate, name, surname, full_name, is_deleted, deleted_at')
+                .in('status', ['active', 'Active', 'ACTIVE'])
+                .or('is_deleted.is.false,deleted_at.is.null');
             if (stuErr) throw stuErr;
 
             if (!students || students.length === 0) {
@@ -93,27 +161,50 @@ class SportsManagementApp {
             // Load sport branches to determine fees
             const branchesRes = await supabaseService.getSportBranches();
             const branchList = branchesRes.success ? (branchesRes.data || []) : [];
-            const branchMap = {};
-            branchList.forEach(b => { if (b && b.id) branchMap[b.id] = b; });
+            // Map by lowercase name for robust matching
+            const branchByName = {};
+            branchList.forEach(b => { if (b && b.name) branchByName[(b.name || '').toString().toLowerCase()] = b; });
 
             let toCreate = [];
             let skipped = 0;
 
-            // For each student, skip if already has a payment for this period
+            // For each student, upsert by payment_period: update if unpaid exists, else insert
+            let updated = 0;
             for (const s of students) {
                 try {
                     const { data: existing, error: exErr } = await supabase
                         .from('payments')
-                        .select('id')
+                        .select('id, is_paid')
                         .eq('student_id', s.id)
                         .eq('payment_period', period)
                         .limit(1);
                     if (exErr) throw exErr;
-                    if (existing && existing.length > 0) { skipped++; continue; }
+                    if (existing && existing.length > 0) {
+                        // If already paid, skip; if unpaid, update amount/notes
+                        const row = existing[0];
+                        if (row.is_paid) { skipped++; continue; }
 
-                    const br = branchMap[s.sport_branch_id] || {};
+                        const sportNameRaw = this.getSportText ? this.getSportText(s.sport) : (s.sport || '');
+                        const sportName = (sportNameRaw || '').toString().trim();
+                        const br = branchByName[(sportName || '').toLowerCase()] || {};
+                        const baseFee = (typeof br.monthly_fee === 'number') ? br.monthly_fee
+                                       : (typeof br.fee === 'number') ? br.fee : 1000;
+                        const discount = (typeof s.discount_rate === 'number') ? s.discount_rate : 0;
+                        const amount = Number((baseFee * (1 - discount / 100)).toFixed(2));
+
+                        const { error: updErr } = await supabase
+                            .from('payments')
+                            .update({ amount, notes: `${sportName || 'Spor'} branşı için aylık aidat - ${period}` })
+                            .eq('id', row.id);
+                        if (!updErr) updated++;
+                        continue;
+                    }
+
+                    const sportNameRaw = this.getSportText ? this.getSportText(s.sport) : (s.sport || '');
+                    const sportName = (sportNameRaw || '').toString().trim();
+                    const br = branchByName[(sportName || '').toLowerCase()] || {};
                     const baseFee = (typeof br.monthly_fee === 'number') ? br.monthly_fee
-                                   : (typeof br.fee === 'number') ? br.fee : 500;
+                                   : (typeof br.fee === 'number') ? br.fee : 1000;
                     const discount = (typeof s.discount_rate === 'number') ? s.discount_rate : 0;
                     const amount = Number((baseFee * (1 - discount / 100)).toFixed(2));
 
@@ -156,10 +247,69 @@ class SportsManagementApp {
                 );
             } catch (_) {}
 
-            alert(`Başarılı: ${period} için ${inserted} aidat kaydı oluşturuldu. (Atlanan: ${skipped})`);
+            alert(`Başarılı: ${period} için ${inserted} yeni, ${updated} güncellendi. (Ödenmiş/atlanan: ${skipped})`);
         } catch (error) {
             console.error('Aylık aidat oluşturma hatası:', error);
             alert('Aylık aidat oluşturulurken hata oluştu: ' + this.formatErrorMessage(error));
+        }
+    }
+
+    // Diagnostic helper to check why a specific student may be skipped
+    async checkStudentFeesByName(fullNameOrTc) {
+        try {
+            const now = new Date();
+            const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const q = (fullNameOrTc || '').toString().trim();
+            if (!q) return { ok: false, error: 'Boş arama ifadesi' };
+
+            // Heuristic: if 11-digit numeric, search by TCNO; otherwise search by full_name ILIKE
+            let student = null;
+            const looksLikeTcno = /^\d{11}$/.test(q);
+            if (looksLikeTcno) {
+                const r = await supabase.from('students').select('*').eq('tcno', q).maybeSingle();
+                if (!r.error && r.data) student = r.data;
+            } else {
+                const r = await supabase.from('students').select('*').ilike('full_name', `%${q}%`).limit(1);
+                if (!r.error && Array.isArray(r.data) && r.data.length > 0) student = r.data[0];
+            }
+            if (!student) return { ok: false, error: 'Öğrenci bulunamadı' };
+
+            // Check payment existence for current period
+            const pay = await supabase.from('payments')
+                .select('id, amount, is_paid, payment_period')
+                .eq('student_id', student.id)
+                .eq('payment_period', period)
+                .limit(1)
+                .single();
+
+            // Branch matching details
+            const bres = await supabaseService.getSportBranches();
+            const branches = bres.success ? (bres.data || []) : [];
+            const m = {};
+            branches.forEach(b => { if (b && b.name) m[b.name.toLowerCase()] = b; });
+            const sportName = (this.getSportText ? this.getSportText(student.sport) : (student.sport || '')).toString().trim();
+            const br = m[sportName.toLowerCase()];
+
+            return {
+                ok: true,
+                student: {
+                    id: student.id,
+                    name: student.name,
+                    surname: student.surname,
+                    full_name: student.full_name,
+                    tcno: student.tcno,
+                    status: student.status,
+                    is_deleted: student.is_deleted,
+                    deleted_at: student.deleted_at,
+                    sport: student.sport,
+                    discount_rate: student.discount_rate
+                },
+                current_period: period,
+                existing_payment: pay && pay.data ? pay.data : null,
+                branch_match: br ? { name: br.name, monthly_fee: br.monthly_fee ?? br.fee ?? 1000 } : null
+            };
+        } catch (e) {
+            return { ok: false, error: e?.message || String(e) };
         }
     }
 
@@ -868,8 +1018,57 @@ class SportsManagementApp {
         this.showScreen('loginScreen');
         // Expose a safe global trigger for one-time monthly fee generation
         // Usage from console: window.triggerMonthlyFees()
-        try { window.triggerMonthlyFees = () => this.generateMonthlyFeesOnce(); } catch (_) {}
+        try {
+            window.triggerMonthlyFees = () => this.generateMonthlyFeesOnce();
+            // Helper to diagnose a specific student's monthly fee for current period
+            window.checkStudentFees = (fullNameOrTc) => this.checkStudentFeesByName(fullNameOrTc);
+            // Helper to update all active students' current period fees
+            window.updateMonthlyFees = () => this.updateMonthlyFeesForCurrentPeriod();
+        } catch (_) {}
     }
+
+    async updateMonthlyFeesForCurrentPeriod() {
+        try {
+            const activeStudents = await supabaseService.getActiveStudents();
+            if (!activeStudents.success) throw new Error('Aktif öğrenciler alınamadı');
+
+            const students = activeStudents.data;
+            const currentPeriod = await supabaseService.getCurrentPaymentPeriod();
+            if (!currentPeriod.success) throw new Error('Geçerli ödeme dönemi alınamadı');
+
+            const periodId = currentPeriod.data.id;
+            const periodStart = currentPeriod.data.start_date;
+            const periodEnd = currentPeriod.data.end_date;
+
+            for (const student of students) {
+                const studentId = student.id;
+                const studentName = student.full_name;
+
+                const existingFees = await supabaseService.getStudentMonthlyFees(studentId, periodId);
+                if (!existingFees.success) throw new Error(`Öğrenci ${studentName} için aylık ücretler alınamadı`);
+
+                const fees = existingFees.data;
+                const unpaidFees = fees.filter(fee => !fee.paid);
+
+                if (unpaidFees.length > 0) {
+                    for (const fee of unpaidFees) {
+                        const feeId = fee.id;
+                        const feeAmount = fee.amount;
+
+                        const updatedFee = await supabaseService.updateMonthlyFee(feeId, feeAmount, periodStart, periodEnd);
+                        if (!updatedFee.success) throw new Error(`Öğrenci ${studentName} için aylık ücret güncellenemedi`);
+                    }
+                } else {
+                    console.log(`Öğrenci ${studentName} için geçerli döneme ait ödenmemiş aylık ücret bulunamadı`);
+                }
+            }
+
+            console.log('Tüm aktif öğrencilerin geçerli döneme ait aylık ücretleri başarıyla güncellendi');
+        } catch (error) {
+            console.error('Aylık ücretler güncellenirken hata oluştu:', error);
+        }
+    }
+
     async initializeSportColors() {
         // 1. Geniş ve modern bir renk paleti tanımla
         const colorPalette = [
@@ -954,6 +1153,14 @@ class SportsManagementApp {
         if (triggerBtn) {
             triggerBtn.addEventListener('click', async () => {
                 await this.generateMonthlyFeesOnce();
+            });
+        }
+
+        // Optional admin button to update this month's fees if present in DOM
+        const updateBtn = document.getElementById('updateMonthlyFeesBtn');
+        if (updateBtn) {
+            updateBtn.addEventListener('click', async () => {
+                await this.updateMonthlyFeesForCurrentPeriod();
             });
         }
 
